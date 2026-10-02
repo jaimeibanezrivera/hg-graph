@@ -56,10 +56,22 @@ async function findRepository() {
   return selected && selected.root;
 }
 
+function setting(key, fallback) {
+  const config = vscode.workspace.getConfiguration("hgGraph");
+  const info = config.inspect(key);
+  const userSet =
+    info &&
+    [info.globalValue, info.workspaceValue, info.workspaceFolderValue].some(
+      (value) => value !== undefined,
+    );
+  return userSet
+    ? config.get(key, fallback)
+    : vscode.workspace.getConfiguration("mercurialTopicMap").get(key, fallback);
+}
+
 async function readGraph(root) {
-  const config = vscode.workspace.getConfiguration("mercurialTopicMap");
-  const limit = config.get("maxCommits", 500);
-  const laneWidth = config.get("laneWidth", 40);
+  const limit = setting("maxCommits", 500);
+  const laneWidth = setting("laneWidth", 40);
   const template = [
     "{rev}",
     "{node}",
@@ -119,7 +131,7 @@ async function readGraph(root) {
   };
 }
 
-class TopicMapPanel {
+class GraphPanel {
   constructor() {
     this.panel = undefined;
     this.root = undefined;
@@ -142,8 +154,8 @@ class TopicMapPanel {
       this.panel.reveal(vscode.ViewColumn.Active);
     } else {
       this.panel = vscode.window.createWebviewPanel(
-        "mercurialTopicMap",
-        "Mercurial Topic Map",
+        "hgGraph",
+        "hg graph",
         vscode.ViewColumn.Active,
         { enableScripts: true, retainContextWhenHidden: true },
       );
@@ -167,7 +179,7 @@ class TopicMapPanel {
       );
     }
 
-    this.panel.title = `Topic Map — ${path.basename(root)}`;
+    this.panel.title = `hg graph — ${path.basename(root)}`;
     await this.refresh();
   }
 
@@ -216,7 +228,7 @@ function loadingHtml() {
 }
 
 function errorHtml(message) {
-  return `<!doctype html><html><body style="color:var(--vscode-errorForeground);background:var(--vscode-editor-background);font-family:var(--vscode-font-family);padding:24px"><h3>Mercurial Topic Map</h3><p>${escapeHtml(message)}</p></body></html>`;
+  return `<!doctype html><html><body style="color:var(--vscode-errorForeground);background:var(--vscode-editor-background);font-family:var(--vscode-font-family);padding:24px"><h3>hg graph</h3><p>${escapeHtml(message)}</p></body></html>`;
 }
 
 function graphHtml(data, viewState) {
@@ -272,7 +284,7 @@ function graphHtml(data, viewState) {
 </head>
 <body>
   <header>
-    <strong>Mercurial Topic Map</strong>
+    <strong>hg graph</strong>
     <select id="topic"></select>
     <input id="search" type="search" placeholder="Filter commits, authors, hashes…">
     <span id="summary"></span>
@@ -565,12 +577,12 @@ function graphHtml(data, viewState) {
 }
 
 function activate(context) {
-  const topicMap = new TopicMapPanel();
+  const graphPanel = new GraphPanel();
   context.subscriptions.push(
-    topicMap,
-    vscode.commands.registerCommand("mercurialTopicMap.open", async () => {
+    graphPanel,
+    vscode.commands.registerCommand("hgGraph.open", async () => {
       try {
-        await topicMap.open();
+        await graphPanel.open();
       } catch (error) {
         vscode.window.showErrorMessage(error.message || String(error));
       }
