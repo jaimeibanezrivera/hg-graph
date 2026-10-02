@@ -46,6 +46,13 @@
           "minimum": 10,
           "maximum": 5000,
           "description": "Maximum number of changesets displayed."
+        },
+        "mercurialTopicMap.laneWidth": {
+          "type": "integer",
+          "default": 40,
+          "minimum": 16,
+          "maximum": 120,
+          "description": "Horizontal spacing in pixels between graph lanes."
         }
       }
     }
