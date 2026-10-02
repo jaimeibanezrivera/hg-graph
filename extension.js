@@ -199,7 +199,7 @@ function graphHtml(data) {
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${scriptNonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    :root { --row-height: 48px; }
+    :root { --row-height: 62px; }
     * { box-sizing: border-box; }
     body { margin: 0; color: var(--vscode-foreground); background: var(--vscode-editor-background); font: 13px var(--vscode-font-family); overflow: hidden; }
     header { height: 48px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--vscode-panel-border); }
@@ -218,20 +218,24 @@ function graphHtml(data) {
     .row:hover { background: var(--vscode-list-hoverBackground); }
     .row.current { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
     .graph-cell { height: 100%; flex: none; position: relative; }
-    .dot { position: absolute; top: 18px; width: 12px; height: 12px; margin-left: -6px; border: 2px solid var(--vscode-editor-background); border-radius: 50%; }
-    .meta { min-width: 0; display: grid; grid-template-columns: minmax(220px, 1fr) 170px 90px 125px; align-items: center; gap: 12px; padding-right: 12px; }
+    .dot { position: absolute; top: 25px; width: 12px; height: 12px; margin-left: -6px; border: 2px solid var(--vscode-editor-background); border-radius: 50%; }
+    .meta { min-width: 0; display: grid; grid-template-columns: minmax(240px, 1fr) minmax(130px, 190px) minmax(150px, 210px); align-items: center; gap: 16px; padding: 6px 14px 6px 0; }
     .description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .topic { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-symbolIcon-classForeground); }
-    .current .topic { color: inherit; }
-    .rev, .date { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); }
-    .current .rev, .current .date { color: inherit; opacity: .85; }
+    .topic { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-symbolIcon-classForeground); background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; padding: 3px 8px; }
+    .topic.default-topic { color: var(--vscode-charts-green); font-weight: 600; }
+    .current .topic:not(.default-topic) { color: inherit; }
+    .commit-meta { min-width: 0; line-height: 18px; }
+    .rev { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); font-family: var(--vscode-editor-font-family); }
+    .author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); font-size: 12px; }
+    .current .rev, .current .author { color: inherit; }
+    .current .author { opacity: .8; }
     aside { border-left: 1px solid var(--vscode-panel-border); padding: 16px; overflow: auto; }
     aside h3 { margin: 0 0 16px; font-size: 14px; }
     .detail-label { color: var(--vscode-descriptionForeground); margin-top: 14px; font-size: 11px; text-transform: uppercase; }
     .detail-value { margin-top: 4px; overflow-wrap: anywhere; }
     .hash { font-family: var(--vscode-editor-font-family); cursor: pointer; }
     .empty { padding: 30px; color: var(--vscode-descriptionForeground); }
-    @media (max-width: 850px) { #main { grid-template-columns: 1fr; } aside { display: none; } .meta { grid-template-columns: minmax(200px, 1fr) 140px 80px; } .date { display: none; } }
+    @media (max-width: 850px) { #main { grid-template-columns: 1fr; } aside { display: none; } .meta { grid-template-columns: minmax(200px, 1fr) 130px 150px; } }
   </style>
 </head>
 <body>
@@ -249,10 +253,11 @@ function graphHtml(data) {
   <script nonce="${scriptNonce}">
     const vscode = acquireVsCodeApi();
     const data = ${encodedData};
-    const colors = [
-      'var(--vscode-charts-blue)', 'var(--vscode-charts-green)',
-      'var(--vscode-charts-orange)', 'var(--vscode-charts-purple)',
-      'var(--vscode-charts-red)', 'var(--vscode-charts-yellow)'
+    const DEFAULT_COLOR = 'var(--vscode-charts-green)';
+    const topicColors = [
+      'var(--vscode-charts-blue)', 'var(--vscode-charts-orange)',
+      'var(--vscode-charts-purple)', 'var(--vscode-charts-red)',
+      'var(--vscode-charts-yellow)'
     ];
     const topicSelect = document.getElementById('topic');
     const search = document.getElementById('search');
@@ -261,7 +266,7 @@ function graphHtml(data) {
     const map = document.getElementById('map');
     const details = document.getElementById('details');
     const summary = document.getElementById('summary');
-    const ROW_HEIGHT = 48;
+    const ROW_HEIGHT = 62;
     const LANE_WIDTH = 22;
 
     function text(value) {
@@ -270,9 +275,22 @@ function graphHtml(data) {
       return span.innerHTML;
     }
 
+    function topicName(commit) {
+      return commit.topic || 'default (no topic)';
+    }
+
+    function commitColor(commit) {
+      if (!commit.topic) return DEFAULT_COLOR;
+      let hash = 0;
+      for (const char of commit.topic) {
+        hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+      }
+      return topicColors[Math.abs(hash) % topicColors.length];
+    }
+
     const counts = new Map();
     for (const commit of data.commits) {
-      const key = commit.topic || '(no topic)';
+      const key = topicName(commit);
       counts.set(key, (counts.get(key) || 0) + 1);
     }
     topicSelect.innerHTML = '<option value="">All topics</option>' +
@@ -284,7 +302,7 @@ function graphHtml(data) {
       const topic = topicSelect.value;
       const query = search.value.trim().toLowerCase();
       return data.commits.filter(commit => {
-        if (topic && (commit.topic || '(no topic)') !== topic) return false;
+        if (topic && topicName(commit) !== topic) return false;
         if (!query) return true;
         return [commit.rev, commit.node, commit.topic, commit.author, commit.description, commit.phase]
           .some(value => String(value || '').toLowerCase().includes(query));
@@ -292,21 +310,49 @@ function graphHtml(data) {
     }
 
     function layout(commits) {
-      const lanes = [];
+      const reserveDefaultLane = topicSelect.value === '';
+      const firstTopicLane = reserveDefaultLane ? 1 : 0;
+      const lanes = reserveDefaultLane ? [null] : [];
       const positions = new Map();
+      const commitsByRev = new Map(data.commits.map(commit => [commit.rev, commit]));
+
+      function allocateTopicLane() {
+        for (let lane = firstTopicLane; lane < lanes.length; lane++) {
+          if (lanes[lane] == null) return lane;
+        }
+        return lanes.length;
+      }
+
+      function placeParent(parentRev, preferredLane) {
+        if (parentRev == null) return;
+        const parent = commitsByRev.get(parentRev);
+        if (reserveDefaultLane && parent && !parent.topic) {
+          lanes[0] = parentRev;
+          return;
+        }
+        if (lanes.includes(parentRev)) return;
+        const lane = preferredLane >= firstTopicLane && lanes[preferredLane] == null
+          ? preferredLane
+          : allocateTopicLane();
+        lanes[lane] = parentRev;
+      }
+
       for (let row = 0; row < commits.length; row++) {
         const commit = commits[row];
-        let lane = lanes.indexOf(commit.rev);
-        if (lane < 0) {
-          lane = lanes.findIndex(value => value == null);
-          if (lane < 0) lane = lanes.length;
+        let lane;
+        if (reserveDefaultLane && !commit.topic) {
+          lane = 0;
+          const duplicateLane = lanes.indexOf(commit.rev, 1);
+          if (duplicateLane >= 1) lanes[duplicateLane] = null;
+        } else {
+          lane = lanes.indexOf(commit.rev, firstTopicLane);
+          if (lane < firstTopicLane) lane = allocateTopicLane();
         }
         positions.set(commit.rev, { lane, row });
-        lanes[lane] = commit.parents.length ? commit.parents[0] : null;
-        if (commit.parents.length > 1 && !lanes.includes(commit.parents[1])) {
-          lanes.splice(lane + 1, 0, commit.parents[1]);
-        }
-        while (lanes.length && lanes[lanes.length - 1] == null) lanes.pop();
+        lanes[lane] = null;
+        placeParent(commit.parents[0], lane);
+        placeParent(commit.parents[1], lane + 1);
+        while (lanes.length > firstTopicLane && lanes[lanes.length - 1] == null) lanes.pop();
       }
       return { positions, laneCount: Math.max(1, ...[...positions.values()].map(value => value.lane + 1)) };
     }
@@ -314,7 +360,7 @@ function graphHtml(data) {
     function showDetails(commit) {
       details.innerHTML =
         '<h3>' + text(commit.description) + '</h3>' +
-        '<div class="detail-label">Topic</div><div class="detail-value">' + text(commit.topic || '(no topic)') + '</div>' +
+        '<div class="detail-label">Topic</div><div class="detail-value">' + text(topicName(commit)) + '</div>' +
         '<div class="detail-label">Changeset</div><div class="detail-value hash" title="Click to copy">' + text(commit.rev + ':' + commit.node) + '</div>' +
         '<div class="detail-label">Author</div><div class="detail-value">' + text(commit.author) + '</div>' +
         '<div class="detail-label">Date</div><div class="detail-value">' + text(commit.date) + '</div>' +
@@ -328,7 +374,7 @@ function graphHtml(data) {
       const commits = visibleCommits();
       const { positions, laneCount } = layout(commits);
       const graphWidth = Math.max(72, laneCount * LANE_WIDTH + 28);
-      const width = Math.max(document.getElementById('scroll').clientWidth, graphWidth + 620);
+      const width = Math.max(document.getElementById('scroll').clientWidth, graphWidth + 700);
       const height = commits.length * ROW_HEIGHT;
       map.style.width = width + 'px';
       map.style.height = height + 'px';
@@ -350,14 +396,14 @@ function graphHtml(data) {
           const target = positions.get(parentRev);
           if (!target) continue;
           const x1 = 18 + source.lane * LANE_WIDTH;
-          const y1 = source.row * ROW_HEIGHT + 24;
+          const y1 = source.row * ROW_HEIGHT + 31;
           const x2 = 18 + target.lane * LANE_WIDTH;
-          const y2 = target.row * ROW_HEIGHT + 24;
+          const y2 = target.row * ROW_HEIGHT + 31;
           const path = document.createElementNS(ns, 'path');
           const bend = Math.min(28, Math.max(10, (y2 - y1) / 2));
           path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + (y1 + bend) + ', ' + x2 + ' ' + (y2 - bend) + ', ' + x2 + ' ' + y2);
           path.setAttribute('fill', 'none');
-          path.setAttribute('stroke', colors[source.lane % colors.length]);
+          path.setAttribute('stroke', commitColor(commit));
           path.setAttribute('stroke-width', '2');
           svg.appendChild(path);
         }
@@ -373,7 +419,7 @@ function graphHtml(data) {
         const dot = document.createElement('span');
         dot.className = 'dot';
         dot.style.left = (18 + position.lane * LANE_WIDTH) + 'px';
-        dot.style.background = colors[position.lane % colors.length];
+        dot.style.background = commitColor(commit);
         graph.appendChild(dot);
         row.appendChild(graph);
 
@@ -381,9 +427,11 @@ function graphHtml(data) {
         meta.className = 'meta';
         meta.innerHTML =
           '<span class="description" title="' + text(commit.description) + '">' + text(commit.description) + '</span>' +
-          '<span class="topic" title="' + text(commit.topic || '(no topic)') + '">' + text(commit.topic || '(no topic)') + '</span>' +
-          '<span class="rev">' + text(commit.rev + ':' + commit.shortNode) + '</span>' +
-          '<span class="date">' + text(commit.date.slice(0, 10)) + '</span>';
+          '<span class="topic' + (!commit.topic ? ' default-topic' : '') + '" title="' + text(topicName(commit)) + '">' + text(topicName(commit)) + '</span>' +
+          '<span class="commit-meta">' +
+            '<div class="rev" title="' + text(commit.rev + ':' + commit.node) + '">' + text(commit.rev + ':' + commit.shortNode) + '</div>' +
+            '<div class="author" title="' + text(commit.author) + '">' + text(commit.author) + '</div>' +
+          '</span>';
         row.appendChild(meta);
         row.addEventListener('click', () => showDetails(commit));
         rows.appendChild(row);
