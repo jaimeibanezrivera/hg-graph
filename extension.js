@@ -155,7 +155,7 @@ class GraphPanel {
     } else {
       this.panel = vscode.window.createWebviewPanel(
         "hgGraph",
-        "hg graph",
+        "Hg Graph",
         vscode.ViewColumn.Active,
         { enableScripts: true, retainContextWhenHidden: true },
       );
@@ -183,7 +183,7 @@ class GraphPanel {
       );
     }
 
-    this.panel.title = `hg graph — ${path.basename(root)}`;
+    this.panel.title = `Hg Graph — ${path.basename(root)}`;
     await this.refresh();
   }
 
@@ -327,7 +327,7 @@ function loadingHtml() {
 }
 
 function errorHtml(message) {
-  return `<!doctype html><html><body style="color:var(--vscode-errorForeground);background:var(--vscode-editor-background);font-family:var(--vscode-font-family);padding:24px"><h3>hg graph</h3><p>${escapeHtml(message)}</p></body></html>`;
+  return `<!doctype html><html><body style="color:var(--vscode-errorForeground);background:var(--vscode-editor-background);font-family:var(--vscode-font-family);padding:24px"><h3>Hg Graph</h3><p>${escapeHtml(message)}</p></body></html>`;
 }
 
 function graphHtml(data, viewState) {
@@ -393,7 +393,7 @@ function graphHtml(data, viewState) {
 </head>
 <body>
   <header>
-    <strong>hg graph</strong>
+    <strong>Hg Graph</strong>
     <select id="topic"></select>
     <input id="search" type="search" placeholder="Filter commits, authors, hashes…">
     <span id="summary"></span>
@@ -764,6 +764,41 @@ function activate(context) {
       }
     }),
   );
+
+  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  statusBarItem.text = "$(git-branch) Hg Graph";
+  statusBarItem.tooltip = "Open Hg Graph";
+  statusBarItem.command = "hgGraph.open";
+
+  let hasRepository = false;
+  const updateStatusBarItem = () => {
+    if (hasRepository && setting("showStatusBarItem", true)) {
+      statusBarItem.show();
+    } else {
+      statusBarItem.hide();
+    }
+  };
+  const detectRepository = async () => {
+    const folders = vscode.workspace.workspaceFolders || [];
+    const results = await Promise.all(
+      folders.map((folder) =>
+        runHg(folder.uri.fsPath, ["root"]).then(() => true, () => false),
+      ),
+    );
+    hasRepository = results.some(Boolean);
+    updateStatusBarItem();
+  };
+
+  context.subscriptions.push(
+    statusBarItem,
+    vscode.workspace.onDidChangeWorkspaceFolders(detectRepository),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("hgGraph.showStatusBarItem")) {
+        updateStatusBarItem();
+      }
+    }),
+  );
+  detectRepository();
 }
 
 function deactivate() {}
