@@ -69,6 +69,7 @@ async function readGraph(root) {
     "{phase}",
     "{author|person}",
     "{date|isodatesec}",
+    "{branch}",
     "{desc}",
   ].join("\\x1f") + "\\x1e";
 
@@ -89,7 +90,7 @@ async function readGraph(root) {
     .split(RECORD)
     .filter(Boolean)
     .map((record) => {
-      const [rev, node, p1rev, p2rev, topic, phase, author, date, description] =
+      const [rev, node, p1rev, p2rev, topic, phase, author, date, branch, description] =
         record.split(FIELD);
       return {
         rev: Number(rev),
@@ -97,6 +98,7 @@ async function readGraph(root) {
         shortNode: node.slice(0, 12),
         parents: [Number(p1rev), Number(p2rev)].filter((parent) => parent >= 0),
         topic: topic || "",
+        branch: branch || "default",
         phase,
         author,
         date,
@@ -292,7 +294,7 @@ function graphHtml(data, viewState) {
       '#ff70a6', '#9fa8da', '#bcaaa4', '#80bfff', '#c77dff'
     ];
     const topicColorByName = new Map(
-      [...new Set(data.commits.map(commit => commit.topic).filter(Boolean))]
+      [...new Set(data.commits.map(topicName).filter(name => name !== 'default'))]
         .sort((a, b) => a.localeCompare(b))
         .map((topic, index) => [topic, TOPIC_COLORS[index % TOPIC_COLORS.length]])
     );
@@ -315,12 +317,12 @@ function graphHtml(data, viewState) {
     }
 
     function topicName(commit) {
-      return commit.topic || 'default';
+      return commit.topic || commit.branch;
     }
 
     function commitColor(commit) {
-      if (!commit.topic) return DEFAULT_COLOR;
-      return topicColorByName.get(commit.topic);
+      const name = topicName(commit);
+      return name === 'default' ? DEFAULT_COLOR : topicColorByName.get(name);
     }
 
     const mainline = new Set();
@@ -354,7 +356,7 @@ function graphHtml(data, viewState) {
       return data.commits.filter(commit => {
         if (topic && topicName(commit) !== topic) return false;
         if (!query) return true;
-        return [commit.rev, commit.node, commit.topic, commit.author, commit.description, commit.phase]
+        return [commit.rev, commit.node, commit.topic, commit.branch, commit.author, commit.description, commit.phase]
           .some(value => String(value || '').toLowerCase().includes(query));
       });
     }
@@ -527,7 +529,7 @@ function graphHtml(data, viewState) {
         meta.innerHTML =
           '<span class="description" title="' + text(commit.description) + '">' + text(commit.description) + '</span>' +
           '<span class="topic-meta">' +
-            '<div class="topic' + (!commit.topic ? ' default-topic' : '') + '" style="color:' + color + '" title="' + text(topicName(commit)) + '">' + text(topicName(commit)) + '</div>' +
+            '<div class="topic' + (topicName(commit) === 'default' ? ' default-topic' : '') + '" style="color:' + color + '" title="' + text(topicName(commit)) + '">' + text(topicName(commit)) + '</div>' +
             '<div class="short-hash" title="' + text(commit.rev + ':' + commit.node) + '">' + text(commit.rev + ':' + commit.shortNode) + '</div>' +
           '</span>' +
           '<span class="author-meta">' +
