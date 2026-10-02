@@ -219,11 +219,11 @@ function graphHtml(data) {
     .row.current { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
     .graph-cell { height: 100%; flex: none; position: relative; }
     .dot { position: absolute; top: 25px; width: 12px; height: 12px; margin-left: -6px; border: 2px solid var(--vscode-editor-background); border-radius: 50%; }
-    .meta { min-width: 0; display: grid; grid-template-columns: minmax(240px, 1fr) minmax(130px, 190px) minmax(150px, 210px); align-items: center; gap: 16px; padding: 6px 14px 6px 0; }
+    .meta { flex: 1; width: 0; min-width: 700px; display: grid; grid-template-columns: minmax(280px, 1fr) 200px 210px; align-items: center; gap: 18px; padding: 6px 14px 6px 0; }
     .description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .topic { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-symbolIcon-classForeground); background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; padding: 3px 8px; }
     .topic.default-topic { color: var(--vscode-charts-green); font-weight: 600; }
-    .current .topic:not(.default-topic) { color: inherit; }
+
     .commit-meta { min-width: 0; line-height: 18px; }
     .rev { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); font-family: var(--vscode-editor-font-family); }
     .author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); font-size: 12px; }
@@ -235,7 +235,7 @@ function graphHtml(data) {
     .detail-value { margin-top: 4px; overflow-wrap: anywhere; }
     .hash { font-family: var(--vscode-editor-font-family); cursor: pointer; }
     .empty { padding: 30px; color: var(--vscode-descriptionForeground); }
-    @media (max-width: 850px) { #main { grid-template-columns: 1fr; } aside { display: none; } .meta { grid-template-columns: minmax(200px, 1fr) 130px 150px; } }
+    @media (max-width: 850px) { #main { grid-template-columns: 1fr; } aside { display: none; } .meta { min-width: 560px; grid-template-columns: minmax(220px, 1fr) 150px 170px; gap: 10px; } }
   </style>
 </head>
 <body>
@@ -411,6 +411,7 @@ function graphHtml(data) {
 
       commits.forEach(commit => {
         const position = positions.get(commit.rev);
+        const color = commitColor(commit);
         const row = document.createElement('div');
         row.className = 'row' + (commit.rev === data.current.rev ? ' current' : '');
         const graph = document.createElement('div');
@@ -419,7 +420,7 @@ function graphHtml(data) {
         const dot = document.createElement('span');
         dot.className = 'dot';
         dot.style.left = (18 + position.lane * LANE_WIDTH) + 'px';
-        dot.style.background = commitColor(commit);
+        dot.style.background = color;
         graph.appendChild(dot);
         row.appendChild(graph);
 
@@ -427,7 +428,7 @@ function graphHtml(data) {
         meta.className = 'meta';
         meta.innerHTML =
           '<span class="description" title="' + text(commit.description) + '">' + text(commit.description) + '</span>' +
-          '<span class="topic' + (!commit.topic ? ' default-topic' : '') + '" title="' + text(topicName(commit)) + '">' + text(topicName(commit)) + '</span>' +
+          '<span class="topic' + (!commit.topic ? ' default-topic' : '') + '" style="color:' + color + '" title="' + text(topicName(commit)) + '">' + text(topicName(commit)) + '</span>' +
           '<span class="commit-meta">' +
             '<div class="rev" title="' + text(commit.rev + ':' + commit.node) + '">' + text(commit.rev + ':' + commit.shortNode) + '</div>' +
             '<div class="author" title="' + text(commit.author) + '">' + text(commit.author) + '</div>' +
