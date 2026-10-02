@@ -221,14 +221,15 @@ function graphHtml(data) {
     .dot { position: absolute; top: 25px; width: 12px; height: 12px; margin-left: -6px; border: 2px solid var(--vscode-editor-background); border-radius: 50%; }
     .meta { flex: 1; width: 0; min-width: 700px; display: grid; grid-template-columns: minmax(280px, 1fr) 200px 210px; align-items: center; gap: 18px; padding: 6px 14px 6px 0; }
     .description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .topic { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-symbolIcon-classForeground); background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; padding: 3px 8px; }
+    .topic { width: fit-content; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-symbolIcon-classForeground); background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; padding: 3px 8px; }
     .topic.default-topic { color: var(--vscode-charts-green); font-weight: 600; }
 
-    .commit-meta { min-width: 0; line-height: 18px; }
-    .rev { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); font-family: var(--vscode-editor-font-family); }
-    .author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); font-size: 12px; }
-    .current .rev, .current .author { color: inherit; }
-    .current .author { opacity: .8; }
+    .topic-meta, .author-meta { min-width: 0; line-height: 18px; }
+    .short-hash { margin-top: 2px; padding-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); font: 12px var(--vscode-editor-font-family); }
+    .author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); }
+    .date { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); font-size: 12px; }
+    .current .short-hash, .current .author, .current .date { color: inherit; }
+    .current .short-hash, .current .date { opacity: .8; }
     aside { border-left: 1px solid var(--vscode-panel-border); padding: 16px; overflow: auto; }
     aside h3 { margin: 0 0 16px; font-size: 14px; }
     .detail-label { color: var(--vscode-descriptionForeground); margin-top: 14px; font-size: 11px; text-transform: uppercase; }
@@ -430,10 +431,13 @@ function graphHtml(data) {
         meta.className = 'meta';
         meta.innerHTML =
           '<span class="description" title="' + text(commit.description) + '">' + text(commit.description) + '</span>' +
-          '<span class="topic' + (!commit.topic ? ' default-topic' : '') + '" style="color:' + color + '" title="' + text(topicName(commit)) + '">' + text(topicName(commit)) + '</span>' +
-          '<span class="commit-meta">' +
-            '<div class="rev" title="' + text(commit.rev + ':' + commit.node) + '">' + text(commit.rev + ':' + commit.shortNode) + '</div>' +
+          '<span class="topic-meta">' +
+            '<div class="topic' + (!commit.topic ? ' default-topic' : '') + '" style="color:' + color + '" title="' + text(topicName(commit)) + '">' + text(topicName(commit)) + '</div>' +
+            '<div class="short-hash" title="' + text(commit.rev + ':' + commit.node) + '">' + text(commit.rev + ':' + commit.shortNode) + '</div>' +
+          '</span>' +
+          '<span class="author-meta">' +
             '<div class="author" title="' + text(commit.author) + '">' + text(commit.author) + '</div>' +
+            '<div class="date" title="' + text(commit.date) + '">' + text(commit.date.slice(0, 10)) + '</div>' +
           '</span>';
         row.appendChild(meta);
         row.addEventListener('click', () => showDetails(commit));
