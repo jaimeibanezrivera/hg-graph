@@ -121,6 +121,8 @@ async function readGraph(root, extraPages = 0) {
     });
 
   const hasMore = commits.length > limit;
+  const loaded = commits.slice(0, limit);
+  const olderTopics = hasMore ? await readOlderTopics(root, loaded[loaded.length - 1].rev) : [];
   const [currentRev, currentNode, currentTopic] = currentRaw.split(FIELD);
   return {
     root,
@@ -128,13 +130,31 @@ async function readGraph(root, extraPages = 0) {
     detailsLocation,
     pageSize,
     hasMore,
-    commits: commits.slice(0, limit),
+    olderTopics,
+    commits: loaded,
     current: {
       rev: Number(currentRev),
       node: currentNode,
       topic: currentTopic || "",
     },
   };
+}
+
+// Topics that have changesets older than the oldest loaded one, or null when
+// this cannot be determined (for example without the topic extension).
+async function readOlderTopics(root, oldestLoadedRev) {
+  try {
+    const output = await runHg(root, [
+      "log",
+      "-r",
+      `topic() and :${oldestLoadedRev - 1}`,
+      "-T",
+      "{topic}\\n",
+    ]);
+    return [...new Set(output.split("\n").filter(Boolean))];
+  } catch {
+    return null;
+  }
 }
 
 class GraphPanel {
@@ -777,7 +797,7 @@ function graphHtml(data, viewState) {
       }
       const height = commits.length * ROW_HEIGHT + (expandedRow != null ? DETAILS_HEIGHT : 0);
       map.style.width = width + 'px';
-      map.style.height = (height + (data.hasMore ? LOAD_MORE_HEIGHT : 0)) + 'px';
+      map.style.height = (height + (needsLoadMore() ? LOAD_MORE_HEIGHT : 0)) + 'px';
       svg.setAttribute('width', graphWidth);
       svg.setAttribute('height', height);
       svg.innerHTML = '';
@@ -878,13 +898,23 @@ function graphHtml(data, viewState) {
 
     topicSelect.addEventListener('change', render);
     search.addEventListener('input', render);
+    const loadedTopics = new Set(data.commits.map(commit => commit.topic).filter(Boolean));
+
+    function needsLoadMore() {
+      if (!data.hasMore) return false;
+      const selected = topicSelect.value;
+      if (!selected || !data.olderTopics || !loadedTopics.has(selected)) return true;
+      return data.olderTopics.includes(selected);
+    }
+
     function appendLoadMore() {
-      if (!data.hasMore) return;
+      if (!needsLoadMore()) return;
       const container = document.createElement('div');
       container.className = 'load-more';
       container.style.height = LOAD_MORE_HEIGHT + 'px';
       const button = document.createElement('button');
-      button.textContent = 'Load ' + data.pageSize + ' more changesets';
+      button.textContent = 'Load more changesets';
+      button.title = 'Load ' + data.pageSize + ' older changesets';
       button.addEventListener('click', () => {
         button.disabled = true;
         button.textContent = 'Loading…';
