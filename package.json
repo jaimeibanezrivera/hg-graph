@@ -41,7 +41,7 @@
       "title": "Mercurial Topic Map",
       "properties": {
         "mercurialTopicMap.maxCommits": {
-          "type": "number",
+          "type": "integer",
           "default": 500,
           "minimum": 10,
           "maximum": 5000,

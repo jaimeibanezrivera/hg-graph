@@ -1,5 +1,6 @@
 const vscode = require("vscode");
 const { execFile } = require("child_process");
+const path = require("path");
 const { promisify } = require("util");
 
 const execFileAsync = promisify(execFile);
@@ -11,7 +12,7 @@ async function runHg(cwd, args) {
     cwd,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, HGPLAIN: "" },
+    env: { ...process.env, HGPLAIN: "", HGENCODING: "utf-8" },
   });
   return stdout;
 }
@@ -29,7 +30,10 @@ async function findRepository() {
       if (!candidates.some((candidate) => candidate.root === root)) {
         candidates.push({ name: folder.name, root });
       }
-    } catch {
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        throw new Error("The hg executable was not found on PATH.");
+      }
       // This workspace folder is not a Mercurial repository.
     }
   }
@@ -113,10 +117,11 @@ async function readGraph(root) {
 }
 
 class TopicMapPanel {
-  constructor(context) {
-    this.context = context;
+  constructor() {
     this.panel = undefined;
     this.root = undefined;
+    this.refreshId = 0;
+    this.panelDisposables = [];
   }
 
   async open() {
@@ -135,20 +140,25 @@ class TopicMapPanel {
         vscode.ViewColumn.Active,
         { enableScripts: true, retainContextWhenHidden: true },
       );
-      this.panel.onDidDispose(() => {
-        this.panel = undefined;
-      });
-      this.panel.webview.onDidReceiveMessage(async (message) => {
-        if (message.type === "refresh") {
-          await this.refresh();
-        } else if (message.type === "copy") {
-          await vscode.env.clipboard.writeText(message.value);
-          vscode.window.setStatusBarMessage("Copied changeset hash", 1500);
-        }
-      });
+      this.panelDisposables.push(
+        this.panel.onDidDispose(() => {
+          this.panel = undefined;
+          for (const disposable of this.panelDisposables.splice(0)) {
+            disposable.dispose();
+          }
+        }),
+        this.panel.webview.onDidReceiveMessage(async (message) => {
+          if (message.type === "refresh") {
+            await this.refresh();
+          } else if (message.type === "copy") {
+            await vscode.env.clipboard.writeText(message.value);
+            vscode.window.setStatusBarMessage("Copied changeset hash", 1500);
+          }
+        }),
+      );
     }
 
-    this.panel.title = `Topic Map — ${root.split("/").pop()}`;
+    this.panel.title = `Topic Map — ${path.basename(root)}`;
     await this.refresh();
   }
 
@@ -156,12 +166,23 @@ class TopicMapPanel {
     if (!this.panel || !this.root) {
       return;
     }
+    const refreshId = ++this.refreshId;
     this.panel.webview.html = loadingHtml();
+    let html;
     try {
       const data = await readGraph(this.root);
-      this.panel.webview.html = graphHtml(data);
+      html = graphHtml(data);
     } catch (error) {
-      this.panel.webview.html = errorHtml(error.message || String(error));
+      html = errorHtml(error.message || String(error));
+    }
+    if (this.panel && refreshId === this.refreshId) {
+      this.panel.webview.html = html;
+    }
+  }
+
+  dispose() {
+    if (this.panel) {
+      this.panel.dispose();
     }
   }
 }
@@ -460,8 +481,9 @@ function graphHtml(data) {
 }
 
 function activate(context) {
-  const topicMap = new TopicMapPanel(context);
+  const topicMap = new TopicMapPanel();
   context.subscriptions.push(
+    topicMap,
     vscode.commands.registerCommand("mercurialTopicMap.open", async () => {
       try {
         await topicMap.open();
