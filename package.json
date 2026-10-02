@@ -2,7 +2,7 @@
   "name": "hg-graph",
   "displayName": "hg graph",
   "description": "A graphical changeset graph for Mercurial, with topic and branch lanes.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "local",
   "engines": {
     "vscode": "^1.85.0"
