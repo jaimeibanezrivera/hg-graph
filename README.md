@@ -14,7 +14,8 @@ changeset's first parent.
 
 Settings:
 
-- `hgGraph.maxCommits` controls how many changesets are loaded.
+- `hgGraph.maxCommits` controls how many changesets are loaded at first, and
+  how many more the **Load more changesets** button at the bottom adds.
 - `hgGraph.laneWidth` controls the horizontal spacing between graph lanes.
 - `hgGraph.detailsLocation` is `inline` (panel below the row, default) or
   `side` (panel to the right of the graph).
