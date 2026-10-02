@@ -533,8 +533,6 @@ function graphHtml(data, viewState) {
     if (savedState) {
       if (savedState.topic === '' || counts.has(savedState.topic)) topicSelect.value = savedState.topic;
       search.value = savedState.search || '';
-    } else if (data.current.topic && counts.has(data.current.topic)) {
-      topicSelect.value = data.current.topic;
     }
 
     function visibleCommits() {
@@ -937,7 +935,14 @@ function graphHtml(data, viewState) {
       vscode.postMessage({ type: 'refresh', state: currentViewState() }));
     window.addEventListener('resize', render);
     render();
-    if (savedState && savedState.scrollTop) scroll.scrollTop = savedState.scrollTop;
+    if (savedState) {
+      scroll.scrollTop = savedState.scrollTop || 0;
+    } else {
+      const currentRow = visibleCommits().findIndex(commit => commit.rev === data.current.rev);
+      if (currentRow > 0) {
+        scroll.scrollTop = Math.max(0, currentRow * ROW_HEIGHT - (scroll.clientHeight - ROW_HEIGHT) / 2);
+      }
+    }
   </script>
 </body>
 </html>`;
