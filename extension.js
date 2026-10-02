@@ -480,6 +480,12 @@ function graphHtml(data, viewState) {
       return commit.topic || commit.branch;
     }
 
+    function commitSummary(commit) {
+      const description = commit.description || '';
+      const blankLine = description.search(/\\n[ \\t]*\\n/);
+      return blankLine >= 0 ? description.slice(0, blankLine) : description;
+    }
+
     function commitColor(commit) {
       const name = topicName(commit);
       return name === 'default' ? DEFAULT_COLOR : topicColorByName.get(name);
@@ -830,7 +836,7 @@ function graphHtml(data, viewState) {
         const meta = document.createElement('div');
         meta.className = 'meta';
         meta.innerHTML =
-          '<span class="description" title="' + text(commit.description) + '">' + text(commit.description) + '</span>' +
+          '<span class="description" title="' + text(commit.description) + '">' + text(commitSummary(commit)) + '</span>' +
           '<span class="topic-meta">' +
             '<div class="topic' + (topicName(commit) === 'default' ? ' default-topic' : '') + '" style="color:' + color + '" title="' + text(topicName(commit)) + '">' + text(topicName(commit)) + '</div>' +
             '<div class="short-hash" title="' + text(commit.rev + ':' + commit.node) + '">' + text(commit.rev + ':' + commit.shortNode) + '</div>' +
