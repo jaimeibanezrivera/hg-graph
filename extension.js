@@ -57,9 +57,9 @@ async function findRepository() {
 }
 
 async function readGraph(root) {
-  const limit = vscode.workspace
-    .getConfiguration("mercurialTopicMap")
-    .get("maxCommits", 500);
+  const config = vscode.workspace.getConfiguration("mercurialTopicMap");
+  const limit = config.get("maxCommits", 500);
+  const laneWidth = config.get("laneWidth", 40);
   const template = [
     "{rev}",
     "{node}",
@@ -107,6 +107,7 @@ async function readGraph(root) {
   const [currentRev, currentNode, currentTopic] = currentRaw.split(FIELD);
   return {
     root,
+    laneWidth,
     commits,
     current: {
       rev: Number(currentRev),
@@ -303,7 +304,8 @@ function graphHtml(data, viewState) {
     const details = document.getElementById('details');
     const summary = document.getElementById('summary');
     const ROW_HEIGHT = 62;
-    const LANE_WIDTH = 28;
+    const LANE_WIDTH = data.laneWidth;
+    const GRAPH_PADDING = 24;
     let selectedRev = savedState ? savedState.selectedRev : null;
 
     function text(value) {
@@ -319,6 +321,16 @@ function graphHtml(data, viewState) {
     function commitColor(commit) {
       if (!commit.topic) return DEFAULT_COLOR;
       return topicColorByName.get(commit.topic);
+    }
+
+    const mainline = new Set();
+    {
+      const allByRev = new Map(data.commits.map(commit => [commit.rev, commit]));
+      let commit = data.commits.find(candidate => topicName(candidate) === 'default');
+      while (commit && !mainline.has(commit.rev)) {
+        mainline.add(commit.rev);
+        commit = allByRev.get(commit.parents[0]);
+      }
     }
 
     const counts = new Map();
@@ -347,52 +359,109 @@ function graphHtml(data, viewState) {
       });
     }
 
+    // Each lane holds a pending edge { child, parent } that runs straight down
+    // until the parent row, so edges never share a lane with other commits.
     function layout(commits) {
       const reserveDefaultLane = topicSelect.value === '';
       const firstTopicLane = reserveDefaultLane ? 1 : 0;
       const lanes = reserveDefaultLane ? [null] : [];
       const positions = new Map();
-      const commitsByRev = new Map(data.commits.map(commit => [commit.rev, commit]));
+      const edges = [];
+      const commitsByRev = new Map(commits.map(commit => [commit.rev, commit]));
+      let laneCount = 1;
 
-      function allocateTopicLane() {
+      function allocateLane(preferred) {
+        if (preferred != null && preferred >= firstTopicLane && lanes[preferred] == null) return preferred;
         for (let lane = firstTopicLane; lane < lanes.length; lane++) {
           if (lanes[lane] == null) return lane;
         }
         return lanes.length;
       }
 
-      function placeParent(parentRev, preferredLane) {
-        if (parentRev == null) return;
-        const parent = commitsByRev.get(parentRev);
-        if (reserveDefaultLane && parent && !parent.topic) {
-          lanes[0] = parentRev;
-          return;
-        }
-        if (lanes.includes(parentRev)) return;
-        const lane = preferredLane >= firstTopicLane && lanes[preferredLane] == null
-          ? preferredLane
-          : allocateTopicLane();
-        lanes[lane] = parentRev;
+      function isDefaultLaneCommit(commit) {
+        return reserveDefaultLane && mainline.has(commit.rev);
       }
 
       for (let row = 0; row < commits.length; row++) {
         const commit = commits[row];
         let lane;
-        if (reserveDefaultLane && !commit.topic) {
+        if (isDefaultLaneCommit(commit)) {
           lane = 0;
-          const duplicateLane = lanes.indexOf(commit.rev, 1);
-          if (duplicateLane >= 1) lanes[duplicateLane] = null;
+          if (lanes[0] && lanes[0].parent !== commit.rev) {
+            const moved = allocateLane();
+            lanes[moved] = lanes[0];
+            lanes[0] = null;
+          }
         } else {
-          lane = lanes.indexOf(commit.rev, firstTopicLane);
-          if (lane < firstTopicLane) lane = allocateTopicLane();
+          lane = lanes.findIndex((edge, index) => index >= firstTopicLane && edge && edge.parent === commit.rev);
+          if (lane < 0) lane = allocateLane();
         }
         positions.set(commit.rev, { lane, row });
-        lanes[lane] = null;
-        placeParent(commit.parents[0], lane);
-        placeParent(commit.parents[1], lane + 1);
+
+        lanes.forEach((edge, index) => {
+          if (edge && edge.parent === commit.rev) {
+            edges.push({ child: edge.child, parent: commit.rev, lane: index });
+            lanes[index] = null;
+          }
+        });
+
+        commit.parents.forEach((parentRev, index) => {
+          const parent = commitsByRev.get(parentRev);
+          if (!parent) return;
+          const edge = { child: commit.rev, parent: parentRev };
+          if (index === 0) {
+            const target = isDefaultLaneCommit(commit) && isDefaultLaneCommit(parent) && lanes[0] == null
+              ? 0
+              : allocateLane(lane);
+            lanes[target] = edge;
+            return;
+          }
+          const shared = lanes.findIndex(pending => pending && pending.parent === parentRev);
+          if (shared >= 0) {
+            edges.push({ ...edge, lane: shared });
+          } else {
+            lanes[allocateLane(lane + 1)] = edge;
+          }
+        });
+
+        laneCount = Math.max(laneCount, lanes.length, lane + 1);
         while (lanes.length > firstTopicLane && lanes[lanes.length - 1] == null) lanes.pop();
       }
-      return { positions, laneCount: Math.max(1, ...[...positions.values()].map(value => value.lane + 1)) };
+      return { positions, edges, laneCount };
+    }
+
+    function laneX(lane) {
+      return GRAPH_PADDING + lane * LANE_WIDTH;
+    }
+
+    function rowY(row) {
+      return row * ROW_HEIGHT + 31;
+    }
+
+    function curve(x1, y1, x2, y2) {
+      const middle = (y1 + y2) / 2;
+      return ' C ' + x1 + ' ' + middle + ', ' + x2 + ' ' + middle + ', ' + x2 + ' ' + y2;
+    }
+
+    function edgePath(source, target, lane) {
+      const x1 = laneX(source.lane);
+      const y1 = rowY(source.row);
+      const xe = laneX(lane);
+      const x2 = laneX(target.lane);
+      const y2 = rowY(target.row);
+      let d = 'M ' + x1 + ' ' + y1;
+      if (target.row - source.row <= 1) {
+        return d + (x1 === x2 ? ' L ' + x2 + ' ' + y2 : curve(x1, y1, x2, y2));
+      }
+      let y = y1;
+      if (xe !== x1) {
+        y = y1 + ROW_HEIGHT;
+        d += curve(x1, y1, xe, y);
+      }
+      const yEnd = xe !== x2 ? y2 - ROW_HEIGHT : y2;
+      if (yEnd > y) d += ' L ' + xe + ' ' + yEnd;
+      if (xe !== x2) d += curve(xe, yEnd, x2, y2);
+      return d;
     }
 
     function showDetails(commit) {
@@ -410,8 +479,8 @@ function graphHtml(data, viewState) {
 
     function render() {
       const commits = visibleCommits();
-      const { positions, laneCount } = layout(commits);
-      const graphWidth = Math.max(110, laneCount * LANE_WIDTH + 36);
+      const { positions, edges, laneCount } = layout(commits);
+      const graphWidth = Math.max(140, (laneCount - 1) * LANE_WIDTH + GRAPH_PADDING * 2);
       const width = Math.max(document.getElementById('scroll').clientWidth, graphWidth + 700);
       const height = commits.length * ROW_HEIGHT;
       map.style.width = width + 'px';
@@ -428,23 +497,14 @@ function graphHtml(data, viewState) {
       }
 
       const ns = 'http://www.w3.org/2000/svg';
-      for (const commit of commits) {
-        const source = positions.get(commit.rev);
-        for (const parentRev of commit.parents) {
-          const target = positions.get(parentRev);
-          if (!target) continue;
-          const x1 = 18 + source.lane * LANE_WIDTH;
-          const y1 = source.row * ROW_HEIGHT + 31;
-          const x2 = 18 + target.lane * LANE_WIDTH;
-          const y2 = target.row * ROW_HEIGHT + 31;
-          const path = document.createElementNS(ns, 'path');
-          const bend = Math.min(28, Math.max(10, (y2 - y1) / 2));
-          path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + (y1 + bend) + ', ' + x2 + ' ' + (y2 - bend) + ', ' + x2 + ' ' + y2);
-          path.setAttribute('fill', 'none');
-          path.setAttribute('stroke', commitColor(commit));
-          path.setAttribute('stroke-width', '2');
-          svg.appendChild(path);
-        }
+      const commitsByRev = new Map(commits.map(commit => [commit.rev, commit]));
+      for (const edge of edges) {
+        const path = document.createElementNS(ns, 'path');
+        path.setAttribute('d', edgePath(positions.get(edge.child), positions.get(edge.parent), edge.lane));
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', commitColor(commitsByRev.get(edge.child)));
+        path.setAttribute('stroke-width', '2');
+        svg.appendChild(path);
       }
 
       commits.forEach(commit => {
@@ -457,7 +517,7 @@ function graphHtml(data, viewState) {
         graph.style.width = graphWidth + 'px';
         const dot = document.createElement('span');
         dot.className = 'dot';
-        dot.style.left = (18 + position.lane * LANE_WIDTH) + 'px';
+        dot.style.left = laneX(position.lane) + 'px';
         dot.style.background = color;
         graph.appendChild(dot);
         row.appendChild(graph);
