@@ -254,11 +254,15 @@ function graphHtml(data) {
     const vscode = acquireVsCodeApi();
     const data = ${encodedData};
     const DEFAULT_COLOR = 'var(--vscode-charts-green)';
-    const topicColors = [
-      'var(--vscode-charts-blue)', 'var(--vscode-charts-orange)',
-      'var(--vscode-charts-purple)', 'var(--vscode-charts-red)',
-      'var(--vscode-charts-yellow)'
-    ];
+    const topicColorByName = new Map(
+      [...new Set(data.commits.map(commit => commit.topic).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b))
+        .map((topic, index) => {
+          const hue = Math.round((205 + index * 137.508) % 360);
+          const lightness = index % 2 === 0 ? 58 : 68;
+          return [topic, 'hsl(' + hue + ' 72% ' + lightness + '%)'];
+        })
+    );
     const topicSelect = document.getElementById('topic');
     const search = document.getElementById('search');
     const rows = document.getElementById('rows');
@@ -276,16 +280,12 @@ function graphHtml(data) {
     }
 
     function topicName(commit) {
-      return commit.topic || 'default (no topic)';
+      return commit.topic || 'default';
     }
 
     function commitColor(commit) {
       if (!commit.topic) return DEFAULT_COLOR;
-      let hash = 0;
-      for (const char of commit.topic) {
-        hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
-      }
-      return topicColors[Math.abs(hash) % topicColors.length];
+      return topicColorByName.get(commit.topic);
     }
 
     const counts = new Map();
