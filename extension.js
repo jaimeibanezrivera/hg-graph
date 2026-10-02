@@ -291,7 +291,7 @@ function graphHtml(data, viewState) {
       '#4ea1ff', '#ff8c42', '#b084f5', '#ff5c77',
       '#35bfe7', '#e66bd4', 'var(--vscode-editor-foreground)',
       '#7c8cff', '#ff7f6e', '#74c0fc', '#d080ff',
-      '#ff70a6', '#9fa8da', '#bcaaa4', '#80bfff', '#c77dff'
+      '#ff70a6', '#9fa8da', '#bcaaa4', '#80bfff', '#c77dff', '#c6ff00'
     ];
     const topicColorByName = new Map(
       [...new Set(data.commits.map(topicName).filter(name => name !== 'default'))]
