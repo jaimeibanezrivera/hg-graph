@@ -120,6 +120,7 @@ class TopicMapPanel {
   constructor() {
     this.panel = undefined;
     this.root = undefined;
+    this.viewState = undefined;
     this.refreshId = 0;
     this.panelDisposables = [];
   }
@@ -128,6 +129,9 @@ class TopicMapPanel {
     const root = await findRepository();
     if (!root) {
       return;
+    }
+    if (root !== this.root) {
+      this.viewState = undefined;
     }
     this.root = root;
 
@@ -143,12 +147,14 @@ class TopicMapPanel {
       this.panelDisposables.push(
         this.panel.onDidDispose(() => {
           this.panel = undefined;
+          this.viewState = undefined;
           for (const disposable of this.panelDisposables.splice(0)) {
             disposable.dispose();
           }
         }),
         this.panel.webview.onDidReceiveMessage(async (message) => {
           if (message.type === "refresh") {
+            this.viewState = message.state;
             await this.refresh();
           } else if (message.type === "copy") {
             await vscode.env.clipboard.writeText(message.value);
@@ -171,7 +177,7 @@ class TopicMapPanel {
     let html;
     try {
       const data = await readGraph(this.root);
-      html = graphHtml(data);
+      html = graphHtml(data, this.viewState);
     } catch (error) {
       html = errorHtml(error.message || String(error));
     }
@@ -210,9 +216,10 @@ function errorHtml(message) {
   return `<!doctype html><html><body style="color:var(--vscode-errorForeground);background:var(--vscode-editor-background);font-family:var(--vscode-font-family);padding:24px"><h3>Mercurial Topic Map</h3><p>${escapeHtml(message)}</p></body></html>`;
 }
 
-function graphHtml(data) {
+function graphHtml(data, viewState) {
   const scriptNonce = nonce();
   const encodedData = JSON.stringify(data).replaceAll("<", "\\u003c");
+  const encodedState = JSON.stringify(viewState || null).replaceAll("<", "\\u003c");
   return `<!doctype html>
 <html>
 <head>
@@ -275,6 +282,7 @@ function graphHtml(data) {
   <script nonce="${scriptNonce}">
     const vscode = acquireVsCodeApi();
     const data = ${encodedData};
+    const savedState = ${encodedState};
     const DEFAULT_COLOR = 'var(--vscode-charts-green)';
     const TOPIC_COLORS = [
       '#4ea1ff', '#ff8c42', '#b084f5', '#ff5c77',
@@ -296,11 +304,12 @@ function graphHtml(data) {
     const summary = document.getElementById('summary');
     const ROW_HEIGHT = 62;
     const LANE_WIDTH = 28;
+    let selectedRev = savedState ? savedState.selectedRev : null;
 
     function text(value) {
       const span = document.createElement('span');
       span.textContent = value == null ? '' : String(value);
-      return span.innerHTML;
+      return span.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
     }
 
     function topicName(commit) {
@@ -320,7 +329,12 @@ function graphHtml(data) {
     topicSelect.innerHTML = '<option value="">All topics</option>' +
       [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]))
         .map(([name, count]) => '<option value="' + text(name) + '">' + text(name) + ' (' + count + ')</option>').join('');
-    if (data.current.topic) topicSelect.value = data.current.topic;
+    if (savedState) {
+      if (savedState.topic === '' || counts.has(savedState.topic)) topicSelect.value = savedState.topic;
+      search.value = savedState.search || '';
+    } else if (data.current.topic && counts.has(data.current.topic)) {
+      topicSelect.value = data.current.topic;
+    }
 
     function visibleCommits() {
       const topic = topicSelect.value;
@@ -461,18 +475,26 @@ function graphHtml(data) {
             '<div class="date" title="' + text(commit.date) + '">' + text(commit.date.slice(0, 10)) + '</div>' +
           '</span>';
         row.appendChild(meta);
-        row.addEventListener('click', () => showDetails(commit));
+        row.addEventListener('click', () => {
+          selectedRev = commit.rev;
+          showDetails(commit);
+        });
         rows.appendChild(row);
       });
 
-      const current = commits.find(commit => commit.rev === data.current.rev);
-      showDetails(current || commits[0]);
+      const selected = commits.find(commit => commit.rev === selectedRev)
+        || commits.find(commit => commit.rev === data.current.rev)
+        || commits[0];
+      showDetails(selected);
     }
 
     topicSelect.addEventListener('change', render);
     search.addEventListener('input', render);
     document.getElementById('refresh').addEventListener('click', () =>
-      vscode.postMessage({ type: 'refresh' }));
+      vscode.postMessage({
+        type: 'refresh',
+        state: { topic: topicSelect.value, search: search.value, selectedRev },
+      }));
     window.addEventListener('resize', render);
     render();
   </script>
