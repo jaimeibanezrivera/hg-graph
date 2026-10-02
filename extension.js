@@ -369,13 +369,13 @@ function graphHtml(data, viewState) {
     #main { display: grid; grid-template-columns: minmax(520px, 1fr) 300px; height: calc(100vh - 48px); }
     #scroll { overflow: auto; position: relative; }
     #map { position: relative; min-width: 100%; }
-    #edges { position: absolute; inset: 0 auto auto 0; pointer-events: none; z-index: 1; }
+    #edges { position: absolute; inset: 0 auto auto 0; pointer-events: none; z-index: 3; }
     #rows { position: relative; z-index: 2; }
+    .dot { stroke: var(--vscode-editor-background); stroke-width: 2; }
     .row { height: var(--row-height); display: flex; align-items: center; border-bottom: 1px solid color-mix(in srgb, var(--vscode-panel-border) 45%, transparent); cursor: pointer; }
     .row:hover { background: var(--vscode-list-hoverBackground); }
     .row.current { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
     .graph-cell { height: 100%; flex: none; position: relative; }
-    .dot { position: absolute; top: 25px; width: 12px; height: 12px; margin-left: -6px; border: 2px solid var(--vscode-editor-background); border-radius: 50%; }
     .meta { flex: 1; width: 0; min-width: 700px; display: grid; grid-template-columns: minmax(280px, 1fr) 200px 210px; align-items: center; gap: 18px; padding: 6px 14px 6px 0; }
     .description { display: -webkit-box; overflow: hidden; white-space: normal; line-height: 18px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
     .topic { width: fit-content; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-symbolIcon-classForeground); background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; padding: 3px 8px; }
@@ -804,6 +804,17 @@ function graphHtml(data, viewState) {
         svg.appendChild(path);
       }
 
+      for (const commit of commits) {
+        const position = positions.get(commit.rev);
+        const dot = document.createElementNS(ns, 'circle');
+        dot.setAttribute('class', 'dot');
+        dot.setAttribute('cx', laneX(position.lane));
+        dot.setAttribute('cy', rowY(position.row));
+        dot.setAttribute('r', '5');
+        dot.style.fill = commitColor(commit);
+        svg.appendChild(dot);
+      }
+
       commits.forEach(commit => {
         const position = positions.get(commit.rev);
         const color = commitColor(commit);
@@ -814,11 +825,6 @@ function graphHtml(data, viewState) {
         const graph = document.createElement('div');
         graph.className = 'graph-cell';
         graph.style.width = graphWidth + 'px';
-        const dot = document.createElement('span');
-        dot.className = 'dot';
-        dot.style.left = laneX(position.lane) + 'px';
-        dot.style.background = color;
-        graph.appendChild(dot);
         row.appendChild(graph);
 
         const meta = document.createElement('div');
