@@ -410,11 +410,11 @@ function graphHtml(data, viewState) {
     .status-R { color: var(--vscode-gitDecoration-deletedResourceForeground); }
     body.inline-mode #main { grid-template-columns: 1fr; }
     body.inline-mode aside { display: none; }
-    .row.expanded { background: var(--vscode-list-inactiveSelectionBackground); }
+    .row.expanded:not(.current) { background: var(--vscode-list-inactiveSelectionBackground); color: var(--vscode-list-inactiveSelectionForeground, inherit); }
     .inline-details { display: flex; overflow: hidden; border-bottom: 1px solid var(--vscode-panel-border); }
     .inline-graph { flex: none; }
     .inline-body { position: relative; flex: 1; min-width: 700px; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr); gap: 24px; padding: 14px 40px 14px 16px; background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border-left: 1px solid var(--vscode-panel-border); }
-    .inline-info, .inline-files { min-height: 0; overflow: auto; }
+    .inline-info, .inline-files { min-width: 0; min-height: 0; overflow: auto; }
     .inline-files > .detail-label { margin-top: 0; }
     .inline-close { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; padding: 0; line-height: 22px; text-align: center; background: transparent; color: var(--vscode-descriptionForeground); border: none; font-size: 16px; }
     .inline-close:hover { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
