@@ -254,14 +254,16 @@ function graphHtml(data) {
     const vscode = acquireVsCodeApi();
     const data = ${encodedData};
     const DEFAULT_COLOR = 'var(--vscode-charts-green)';
+    const TOPIC_COLORS = [
+      '#4ea1ff', '#ff8c42', '#b084f5', '#ff5c77',
+      '#35bfe7', '#e66bd4', 'var(--vscode-editor-foreground)',
+      '#7c8cff', '#ff7f6e', '#74c0fc', '#d080ff',
+      '#ff70a6', '#9fa8da', '#bcaaa4', '#80bfff', '#c77dff'
+    ];
     const topicColorByName = new Map(
       [...new Set(data.commits.map(commit => commit.topic).filter(Boolean))]
         .sort((a, b) => a.localeCompare(b))
-        .map((topic, index) => {
-          const hue = Math.round((205 + index * 137.508) % 360);
-          const lightness = index % 2 === 0 ? 58 : 68;
-          return [topic, 'hsl(' + hue + ' 72% ' + lightness + '%)'];
-        })
+        .map((topic, index) => [topic, TOPIC_COLORS[index % TOPIC_COLORS.length]])
     );
     const topicSelect = document.getElementById('topic');
     const search = document.getElementById('search');
