@@ -2,7 +2,7 @@
   "name": "hg-graph",
   "displayName": "Hg Graph",
   "description": "A graphical changeset graph for Mercurial, with topic and branch lanes.",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "publisher": "local",
   "engines": {
     "vscode": "^1.85.0"
@@ -54,6 +54,19 @@
           "minimum": 16,
           "maximum": 120,
           "description": "Horizontal spacing in pixels between graph lanes."
+        },
+        "hgGraph.detailsLocation": {
+          "type": "string",
+          "enum": [
+            "inline",
+            "side"
+          ],
+          "enumDescriptions": [
+            "Open changeset details in a panel below the clicked row. Click the row again or press Escape to close it.",
+            "Show changeset details in a panel to the right of the graph."
+          ],
+          "default": "inline",
+          "description": "Where changeset details are shown when a changeset is clicked."
         },
         "hgGraph.showStatusBarItem": {
           "type": "boolean",

@@ -72,6 +72,7 @@ function setting(key, fallback) {
 async function readGraph(root) {
   const limit = setting("maxCommits", 500);
   const laneWidth = setting("laneWidth", 40);
+  const detailsLocation = setting("detailsLocation", "inline");
   const template = [
     "{rev}",
     "{node}",
@@ -122,6 +123,7 @@ async function readGraph(root) {
   return {
     root,
     laneWidth,
+    detailsLocation,
     commits,
     current: {
       rev: Number(currentRev),
@@ -388,6 +390,16 @@ function graphHtml(data, viewState) {
     .status-M { color: var(--vscode-gitDecoration-modifiedResourceForeground); }
     .status-A { color: var(--vscode-gitDecoration-addedResourceForeground); }
     .status-R { color: var(--vscode-gitDecoration-deletedResourceForeground); }
+    body.inline-mode #main { grid-template-columns: 1fr; }
+    body.inline-mode aside { display: none; }
+    .row.expanded { background: var(--vscode-list-inactiveSelectionBackground); }
+    .inline-details { display: flex; overflow: hidden; border-bottom: 1px solid var(--vscode-panel-border); }
+    .inline-graph { flex: none; }
+    .inline-body { position: relative; flex: 1; min-width: 700px; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr); gap: 24px; padding: 14px 40px 14px 16px; background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border-left: 1px solid var(--vscode-panel-border); }
+    .inline-info, .inline-files { min-height: 0; overflow: auto; }
+    .inline-files > .detail-label { margin-top: 0; }
+    .inline-close { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; padding: 0; line-height: 22px; text-align: center; background: transparent; color: var(--vscode-descriptionForeground); border: none; font-size: 16px; }
+    .inline-close:hover { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
     @media (max-width: 850px) { #main { grid-template-columns: 1fr; } aside { display: none; } .meta { min-width: 560px; grid-template-columns: minmax(220px, 1fr) 150px 170px; gap: 10px; } }
   </style>
 </head>
@@ -429,9 +441,14 @@ function graphHtml(data, viewState) {
     const ROW_HEIGHT = 62;
     const LANE_WIDTH = data.laneWidth;
     const GRAPH_PADDING = 24;
+    const DETAILS_HEIGHT = 280;
+    const INLINE = data.detailsLocation !== 'side';
     let selectedRev = savedState ? savedState.selectedRev : null;
     let detailsRev = null;
+    let filesContainer = null;
+    let expandedRow = null;
     const filesByRev = new Map();
+    if (INLINE) document.body.classList.add('inline-mode');
 
     function text(value) {
       const span = document.createElement('span');
@@ -559,8 +576,13 @@ function graphHtml(data, viewState) {
       return GRAPH_PADDING + lane * LANE_WIDTH;
     }
 
+    function gapAfter(row) {
+      return row === expandedRow ? DETAILS_HEIGHT : 0;
+    }
+
     function rowY(row) {
-      return row * ROW_HEIGHT + 31;
+      const offset = expandedRow != null && row > expandedRow ? DETAILS_HEIGHT : 0;
+      return row * ROW_HEIGHT + 31 + offset;
     }
 
     function curve(x1, y1, x2, y2) {
@@ -568,46 +590,78 @@ function graphHtml(data, viewState) {
       return ' C ' + x1 + ' ' + middle + ', ' + x2 + ' ' + middle + ', ' + x2 + ' ' + y2;
     }
 
+    // Bends only happen over a single row height, so lines run straight
+    // down through an open inline details panel.
     function edgePath(source, target, lane) {
       const x1 = laneX(source.lane);
       const y1 = rowY(source.row);
-      const xe = laneX(lane);
+      const xs = target.row - source.row > 1 ? laneX(lane) : x1;
       const x2 = laneX(target.lane);
       const y2 = rowY(target.row);
       let d = 'M ' + x1 + ' ' + y1;
-      if (target.row - source.row <= 1) {
-        return d + (x1 === x2 ? ' L ' + x2 + ' ' + y2 : curve(x1, y1, x2, y2));
-      }
       let y = y1;
-      if (xe !== x1) {
-        y = y1 + ROW_HEIGHT;
-        d += curve(x1, y1, xe, y);
+      if (xs !== x1) {
+        const start = y1 + gapAfter(source.row);
+        if (start > y) d += ' L ' + x1 + ' ' + start;
+        d += curve(x1, start, xs, start + ROW_HEIGHT);
+        y = start + ROW_HEIGHT;
       }
-      const yEnd = xe !== x2 ? y2 - ROW_HEIGHT : y2;
-      if (yEnd > y) d += ' L ' + xe + ' ' + yEnd;
-      if (xe !== x2) d += curve(xe, yEnd, x2, y2);
+      const yEnd = xs !== x2 ? y2 - ROW_HEIGHT : y2;
+      if (yEnd > y) d += ' L ' + xs + ' ' + yEnd;
+      if (xs !== x2) d += curve(xs, Math.max(y, yEnd), x2, y2);
       return d;
     }
 
-    function showDetails(commit) {
-      details.innerHTML =
-        '<div class="detail-message">' + text(commit.description) + '</div>' +
+    function detailsInfoHtml(commit) {
+      return '<div class="detail-message">' + text(commit.description) + '</div>' +
         '<div class="detail-label">Topic</div><div class="detail-value">' + text(topicName(commit)) + '</div>' +
         '<div class="detail-label">Changeset</div><div class="detail-value hash" title="Click to copy">' + text(commit.rev + ':' + commit.node) + '</div>' +
         '<div class="detail-label">Author</div><div class="detail-value">' + text(commit.author) + '</div>' +
         '<div class="detail-label">Date</div><div class="detail-value">' + text(commit.date) + '</div>' +
         '<div class="detail-label">Phase</div><div class="detail-value">' + text(commit.phase) + '</div>' +
-        '<div class="detail-label">Parents</div><div class="detail-value">' + text(commit.parents.join(', ') || 'none') + '</div>' +
-        '<div class="detail-label">Changed files</div><div class="detail-value" id="files"></div>';
-      details.querySelector('.hash').addEventListener('click', () =>
+        '<div class="detail-label">Parents</div><div class="detail-value">' + text(commit.parents.join(', ') || 'none') + '</div>';
+    }
+
+    const FILES_HTML = '<div class="detail-label">Changed files</div><div class="detail-value files"></div>';
+
+    function bindDetails(container, commit) {
+      container.querySelector('.hash').addEventListener('click', () =>
         vscode.postMessage({ type: 'copy', value: commit.node }));
       detailsRev = commit.rev;
+      filesContainer = container.querySelector('.files');
       if (filesByRev.has(commit.rev)) {
         renderFiles(commit, filesByRev.get(commit.rev));
       } else {
-        document.getElementById('files').textContent = 'Loading…';
+        filesContainer.textContent = 'Loading…';
         vscode.postMessage({ type: 'files', rev: commit.rev });
       }
+    }
+
+    function showDetails(commit) {
+      details.innerHTML = detailsInfoHtml(commit) + FILES_HTML;
+      bindDetails(details, commit);
+    }
+
+    function inlineDetails(commit, graphWidth) {
+      const panel = document.createElement('div');
+      panel.className = 'inline-details';
+      panel.style.height = DETAILS_HEIGHT + 'px';
+      panel.innerHTML =
+        '<div class="inline-graph" style="width:' + graphWidth + 'px"></div>' +
+        '<div class="inline-body">' +
+          '<div class="inline-info">' + detailsInfoHtml(commit) + '</div>' +
+          '<div class="inline-files">' + FILES_HTML + '</div>' +
+          '<button class="inline-close" title="Close (Esc)">\u00d7</button>' +
+        '</div>';
+      panel.querySelector('.inline-close').addEventListener('click', closeInlineDetails);
+      bindDetails(panel, commit);
+      return panel;
+    }
+
+    function closeInlineDetails() {
+      if (!INLINE || selectedRev == null) return;
+      selectedRev = null;
+      render();
     }
 
     function shortLabel(rev) {
@@ -625,7 +679,8 @@ function graphHtml(data, viewState) {
     }
 
     function renderFiles(commit, result) {
-      const container = document.getElementById('files');
+      const container = filesContainer;
+      if (!container) return;
       if (result.error) {
         container.textContent = result.error;
         return;
@@ -671,7 +726,14 @@ function graphHtml(data, viewState) {
       const { positions, edges, laneCount } = layout(commits);
       const graphWidth = Math.max(140, (laneCount - 1) * LANE_WIDTH + GRAPH_PADDING * 2);
       const width = Math.max(document.getElementById('scroll').clientWidth, graphWidth + 700);
-      const height = commits.length * ROW_HEIGHT;
+      expandedRow = null;
+      if (INLINE) {
+        detailsRev = null;
+        filesContainer = null;
+        const index = commits.findIndex(commit => commit.rev === selectedRev);
+        if (index >= 0) expandedRow = index;
+      }
+      const height = commits.length * ROW_HEIGHT + (expandedRow != null ? DETAILS_HEIGHT : 0);
       map.style.width = width + 'px';
       map.style.height = height + 'px';
       svg.setAttribute('width', graphWidth);
@@ -700,7 +762,9 @@ function graphHtml(data, viewState) {
         const position = positions.get(commit.rev);
         const color = commitColor(commit);
         const row = document.createElement('div');
-        row.className = 'row' + (commit.rev === data.current.rev ? ' current' : '');
+        row.className = 'row' +
+          (commit.rev === data.current.rev ? ' current' : '') +
+          (position.row === expandedRow ? ' expanded' : '');
         const graph = document.createElement('div');
         graph.className = 'graph-cell';
         graph.style.width = graphWidth + 'px';
@@ -725,17 +789,33 @@ function graphHtml(data, viewState) {
           '</span>';
         row.appendChild(meta);
         row.addEventListener('click', () => {
-          selectedRev = commit.rev;
-          showDetails(commit);
+          if (INLINE) {
+            selectedRev = selectedRev === commit.rev ? null : commit.rev;
+            render();
+            const panel = rows.querySelector('.inline-details');
+            if (panel) panel.scrollIntoView({ block: 'nearest' });
+          } else {
+            selectedRev = commit.rev;
+            showDetails(commit);
+          }
         });
         rows.appendChild(row);
+        if (position.row === expandedRow) {
+          rows.appendChild(inlineDetails(commit, graphWidth));
+        }
       });
 
-      const selected = commits.find(commit => commit.rev === selectedRev)
-        || commits.find(commit => commit.rev === data.current.rev)
-        || commits[0];
-      showDetails(selected);
+      if (!INLINE) {
+        const selected = commits.find(commit => commit.rev === selectedRev)
+          || commits.find(commit => commit.rev === data.current.rev)
+          || commits[0];
+        showDetails(selected);
+      }
     }
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closeInlineDetails();
+    });
 
     topicSelect.addEventListener('change', render);
     search.addEventListener('input', render);
@@ -795,6 +875,12 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("hgGraph.showStatusBarItem")) {
         updateStatusBarItem();
+      }
+      if (
+        event.affectsConfiguration("hgGraph.detailsLocation") ||
+        event.affectsConfiguration("hgGraph.laneWidth")
+      ) {
+        graphPanel.refresh();
       }
     }),
   );
