@@ -251,11 +251,51 @@ const revisionContentProvider = {
 };
 
 async function changedFiles(root, rev) {
-  const output = await runHg(root, ["status", "--change", String(rev)]);
-  return output
+  const [statusOutput, stats] = await Promise.all([
+    runHg(root, ["status", "--change", String(rev)]),
+    runHg(root, ["diff", "--git", "-c", String(rev)])
+      .then(diffStats)
+      .catch(() => new Map()),
+  ]);
+  return statusOutput
     .split("\n")
     .filter(Boolean)
-    .map((line) => ({ status: line[0], path: line.slice(2) }));
+    .map((line) => {
+      const file = { status: line[0], path: line.slice(2) };
+      return { ...file, ...stats.get(file.path) };
+    });
+}
+
+function diffStats(diff) {
+  const stats = new Map();
+  let current;
+  let inHunk = false;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("diff --git a/")) {
+      // "diff --git a/<path> b/<path>": both halves are equal unless renamed.
+      const length = (line.length - 16) / 2;
+      const oldPath = line.slice(13, 13 + length);
+      const newPath = line.slice(16 + length);
+      current = { added: 0, deleted: 0, binary: false };
+      stats.set(oldPath === newPath ? oldPath : newPath, current);
+      inHunk = false;
+    } else if (!current) {
+      continue;
+    } else if (!inHunk && line.startsWith("rename to ")) {
+      stats.set(line.slice("rename to ".length), current);
+    } else if (!inHunk && line.startsWith("copy to ")) {
+      stats.set(line.slice("copy to ".length), current);
+    } else if (line === "GIT binary patch" || line.startsWith("Binary file")) {
+      current.binary = true;
+    } else if (line.startsWith("@@")) {
+      inHunk = true;
+    } else if (inHunk && line.startsWith("+")) {
+      current.added++;
+    } else if (inHunk && line.startsWith("-")) {
+      current.deleted++;
+    }
+  }
+  return stats;
 }
 
 async function openDiff(root, { rev, parent, label, parentLabel, path: file }) {
@@ -341,7 +381,10 @@ function graphHtml(data, viewState) {
     .file { display: flex; gap: 8px; align-items: baseline; padding: 2px 4px; margin: 0 -4px; border-radius: 2px; cursor: pointer; }
     .file:hover { background: var(--vscode-list-hoverBackground); }
     .file-status { flex: none; width: 12px; font: 12px var(--vscode-editor-font-family); font-weight: 600; }
-    .file-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-stats { flex: none; display: flex; gap: 6px; font: 12px var(--vscode-editor-font-family); color: var(--vscode-descriptionForeground); }
+    .stat-added { color: var(--vscode-gitDecoration-addedResourceForeground); }
+    .stat-deleted { color: var(--vscode-gitDecoration-deletedResourceForeground); }
     .status-M { color: var(--vscode-gitDecoration-modifiedResourceForeground); }
     .status-A { color: var(--vscode-gitDecoration-addedResourceForeground); }
     .status-R { color: var(--vscode-gitDecoration-deletedResourceForeground); }
@@ -572,6 +615,15 @@ function graphHtml(data, viewState) {
       return commit ? commit.shortNode : String(rev);
     }
 
+    function fileStats(file) {
+      if (file.binary) return '<span class="file-stats">bin</span>';
+      if (file.added == null) return '';
+      return '<span class="file-stats">' +
+        (file.added ? '<span class="stat-added">+' + file.added + '</span>' : '') +
+        (file.deleted ? '<span class="stat-deleted">\u2212' + file.deleted + '</span>' : '') +
+        '</span>';
+    }
+
     function renderFiles(commit, result) {
       const container = document.getElementById('files');
       if (result.error) {
@@ -590,7 +642,8 @@ function graphHtml(data, viewState) {
         entry.title = file.path + ' (click to diff against parent)';
         entry.innerHTML =
           '<span class="file-status status-' + text(file.status) + '">' + text(file.status) + '</span>' +
-          '<span class="file-path">' + text(file.path) + '</span>';
+          '<span class="file-path">' + text(file.path) + '</span>' +
+          fileStats(file);
         entry.addEventListener('click', () => vscode.postMessage({
           type: 'diff',
           rev: commit.rev,
