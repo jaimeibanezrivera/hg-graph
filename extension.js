@@ -174,6 +174,10 @@ class GraphPanel {
           } else if (message.type === "copy") {
             await vscode.env.clipboard.writeText(message.value);
             vscode.window.setStatusBarMessage("Copied changeset hash", 1500);
+          } else if (message.type === "files") {
+            await this.sendChangedFiles(message.rev);
+          } else if (message.type === "diff") {
+            await openDiff(this.root, message);
           }
         }),
       );
@@ -201,11 +205,66 @@ class GraphPanel {
     }
   }
 
+  async sendChangedFiles(rev) {
+    let files = [];
+    let error;
+    try {
+      files = await changedFiles(this.root, rev);
+    } catch (caught) {
+      error = caught.message || String(caught);
+    }
+    if (this.panel) {
+      this.panel.webview.postMessage({ type: "files", rev, files, error });
+    }
+  }
+
   dispose() {
     if (this.panel) {
       this.panel.dispose();
     }
   }
+}
+
+const CONTENT_SCHEME = "hg-graph";
+
+function revisionUri(root, rev, file) {
+  return vscode.Uri.from({
+    scheme: CONTENT_SCHEME,
+    path: `/${file}`,
+    query: JSON.stringify({ root, rev }),
+  });
+}
+
+const revisionContentProvider = {
+  async provideTextDocumentContent(uri) {
+    const { root, rev } = JSON.parse(uri.query);
+    if (rev == null) {
+      return "";
+    }
+    try {
+      return await runHg(root, ["cat", "-r", String(rev), `path:${uri.path.slice(1)}`]);
+    } catch {
+      // The file does not exist at this revision (added or removed).
+      return "";
+    }
+  },
+};
+
+async function changedFiles(root, rev) {
+  const output = await runHg(root, ["status", "--change", String(rev)]);
+  return output
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => ({ status: line[0], path: line.slice(2) }));
+}
+
+async function openDiff(root, { rev, parent, label, parentLabel, path: file }) {
+  const left = revisionUri(root, parent == null ? null : parent, file);
+  const right = revisionUri(root, rev, file);
+  const title = `${path.basename(file)} (${parentLabel || "empty"} ↔ ${label})`;
+  await vscode.commands.executeCommand("vscode.diff", left, right, title, {
+    preview: true,
+  });
 }
 
 function nonce() {
@@ -279,6 +338,13 @@ function graphHtml(data, viewState) {
     .detail-value { margin-top: 4px; overflow-wrap: anywhere; }
     .hash { font-family: var(--vscode-editor-font-family); cursor: pointer; }
     .empty { padding: 30px; color: var(--vscode-descriptionForeground); }
+    .file { display: flex; gap: 8px; align-items: baseline; padding: 2px 4px; margin: 0 -4px; border-radius: 2px; cursor: pointer; }
+    .file:hover { background: var(--vscode-list-hoverBackground); }
+    .file-status { flex: none; width: 12px; font: 12px var(--vscode-editor-font-family); font-weight: 600; }
+    .file-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .status-M { color: var(--vscode-gitDecoration-modifiedResourceForeground); }
+    .status-A { color: var(--vscode-gitDecoration-addedResourceForeground); }
+    .status-R { color: var(--vscode-gitDecoration-deletedResourceForeground); }
     @media (max-width: 850px) { #main { grid-template-columns: 1fr; } aside { display: none; } .meta { min-width: 560px; grid-template-columns: minmax(220px, 1fr) 150px 170px; gap: 10px; } }
   </style>
 </head>
@@ -321,6 +387,8 @@ function graphHtml(data, viewState) {
     const LANE_WIDTH = data.laneWidth;
     const GRAPH_PADDING = 24;
     let selectedRev = savedState ? savedState.selectedRev : null;
+    let detailsRev = null;
+    const filesByRev = new Map();
 
     function text(value) {
       const span = document.createElement('span');
@@ -486,10 +554,64 @@ function graphHtml(data, viewState) {
         '<div class="detail-label">Author</div><div class="detail-value">' + text(commit.author) + '</div>' +
         '<div class="detail-label">Date</div><div class="detail-value">' + text(commit.date) + '</div>' +
         '<div class="detail-label">Phase</div><div class="detail-value">' + text(commit.phase) + '</div>' +
-        '<div class="detail-label">Parents</div><div class="detail-value">' + text(commit.parents.join(', ') || 'none') + '</div>';
+        '<div class="detail-label">Parents</div><div class="detail-value">' + text(commit.parents.join(', ') || 'none') + '</div>' +
+        '<div class="detail-label">Changed files</div><div class="detail-value" id="files"></div>';
       details.querySelector('.hash').addEventListener('click', () =>
         vscode.postMessage({ type: 'copy', value: commit.node }));
+      detailsRev = commit.rev;
+      if (filesByRev.has(commit.rev)) {
+        renderFiles(commit, filesByRev.get(commit.rev));
+      } else {
+        document.getElementById('files').textContent = 'Loading…';
+        vscode.postMessage({ type: 'files', rev: commit.rev });
+      }
     }
+
+    function shortLabel(rev) {
+      const commit = data.commits.find(candidate => candidate.rev === rev);
+      return commit ? commit.shortNode : String(rev);
+    }
+
+    function renderFiles(commit, result) {
+      const container = document.getElementById('files');
+      if (result.error) {
+        container.textContent = result.error;
+        return;
+      }
+      if (!result.files.length) {
+        container.textContent = 'No file changes.';
+        return;
+      }
+      container.innerHTML = '';
+      const parent = commit.parents.length ? commit.parents[0] : null;
+      for (const file of result.files) {
+        const entry = document.createElement('div');
+        entry.className = 'file';
+        entry.title = file.path + ' (click to diff against parent)';
+        entry.innerHTML =
+          '<span class="file-status status-' + text(file.status) + '">' + text(file.status) + '</span>' +
+          '<span class="file-path">' + text(file.path) + '</span>';
+        entry.addEventListener('click', () => vscode.postMessage({
+          type: 'diff',
+          rev: commit.rev,
+          parent,
+          label: commit.shortNode,
+          parentLabel: parent == null ? null : shortLabel(parent),
+          path: file.path,
+        }));
+        container.appendChild(entry);
+      }
+    }
+
+    window.addEventListener('message', event => {
+      const message = event.data;
+      if (message.type !== 'files') return;
+      filesByRev.set(message.rev, message);
+      if (message.rev === detailsRev) {
+        const commit = data.commits.find(candidate => candidate.rev === message.rev);
+        if (commit) renderFiles(commit, message);
+      }
+    });
 
     function render() {
       const commits = visibleCommits();
@@ -580,6 +702,7 @@ function activate(context) {
   const graphPanel = new GraphPanel();
   context.subscriptions.push(
     graphPanel,
+    vscode.workspace.registerTextDocumentContentProvider(CONTENT_SCHEME, revisionContentProvider),
     vscode.commands.registerCommand("hgGraph.open", async () => {
       try {
         await graphPanel.open();
