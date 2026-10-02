@@ -65,7 +65,7 @@ async function readGraph(root) {
     "{phase}",
     "{author|person}",
     "{date|isodatesec}",
-    "{desc|firstline}",
+    "{desc}",
   ].join("\\x1f") + "\\x1e";
 
   const [raw, currentRaw] = await Promise.all([
@@ -220,10 +220,9 @@ function graphHtml(data) {
     .graph-cell { height: 100%; flex: none; position: relative; }
     .dot { position: absolute; top: 25px; width: 12px; height: 12px; margin-left: -6px; border: 2px solid var(--vscode-editor-background); border-radius: 50%; }
     .meta { flex: 1; width: 0; min-width: 700px; display: grid; grid-template-columns: minmax(280px, 1fr) 200px 210px; align-items: center; gap: 18px; padding: 6px 14px 6px 0; }
-    .description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .description { display: -webkit-box; overflow: hidden; white-space: normal; line-height: 18px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
     .topic { width: fit-content; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-symbolIcon-classForeground); background: color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; padding: 3px 8px; }
     .topic.default-topic { color: var(--vscode-charts-green); font-weight: 600; }
-
     .topic-meta, .author-meta { min-width: 0; line-height: 18px; }
     .short-hash { margin-top: 2px; padding-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); font: 12px var(--vscode-editor-font-family); }
     .author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); }
@@ -232,6 +231,7 @@ function graphHtml(data) {
     .current .short-hash, .current .date { opacity: .8; }
     aside { border-left: 1px solid var(--vscode-panel-border); padding: 16px; overflow: auto; }
     aside h3 { margin: 0 0 16px; font-size: 14px; }
+    .detail-message { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; }
     .detail-label { color: var(--vscode-descriptionForeground); margin-top: 14px; font-size: 11px; text-transform: uppercase; }
     .detail-value { margin-top: 4px; overflow-wrap: anywhere; }
     .hash { font-family: var(--vscode-editor-font-family); cursor: pointer; }
@@ -274,7 +274,7 @@ function graphHtml(data) {
     const details = document.getElementById('details');
     const summary = document.getElementById('summary');
     const ROW_HEIGHT = 62;
-    const LANE_WIDTH = 22;
+    const LANE_WIDTH = 28;
 
     function text(value) {
       const span = document.createElement('span');
@@ -362,7 +362,7 @@ function graphHtml(data) {
 
     function showDetails(commit) {
       details.innerHTML =
-        '<h3>' + text(commit.description) + '</h3>' +
+        '<div class="detail-message">' + text(commit.description) + '</div>' +
         '<div class="detail-label">Topic</div><div class="detail-value">' + text(topicName(commit)) + '</div>' +
         '<div class="detail-label">Changeset</div><div class="detail-value hash" title="Click to copy">' + text(commit.rev + ':' + commit.node) + '</div>' +
         '<div class="detail-label">Author</div><div class="detail-value">' + text(commit.author) + '</div>' +
@@ -376,7 +376,7 @@ function graphHtml(data) {
     function render() {
       const commits = visibleCommits();
       const { positions, laneCount } = layout(commits);
-      const graphWidth = Math.max(72, laneCount * LANE_WIDTH + 28);
+      const graphWidth = Math.max(110, laneCount * LANE_WIDTH + 36);
       const width = Math.max(document.getElementById('scroll').clientWidth, graphWidth + 700);
       const height = commits.length * ROW_HEIGHT;
       map.style.width = width + 'px';
