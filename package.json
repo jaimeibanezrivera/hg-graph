@@ -1,8 +1,8 @@
 {
   "name": "hg-graph",
-  "displayName": "hg graph",
+  "displayName": "Hg Graph",
   "description": "A graphical changeset graph for Mercurial, with topic and branch lanes.",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "publisher": "local",
   "engines": {
     "vscode": "^1.85.0"
@@ -12,14 +12,15 @@
     "Visualization"
   ],
   "activationEvents": [
-    "onCommand:hgGraph.open"
+    "onCommand:hgGraph.open",
+    "onStartupFinished"
   ],
   "main": "./extension.js",
   "contributes": {
     "commands": [
       {
         "command": "hgGraph.open",
-        "title": "hg graph: Open",
+        "title": "Hg Graph: Open",
         "icon": "$(git-branch)"
       }
     ],
@@ -38,7 +39,7 @@
       ]
     },
     "configuration": {
-      "title": "hg graph",
+      "title": "Hg Graph",
       "properties": {
         "hgGraph.maxCommits": {
           "type": "integer",
@@ -53,6 +54,11 @@
           "minimum": 16,
           "maximum": 120,
           "description": "Horizontal spacing in pixels between graph lanes."
+        },
+        "hgGraph.showStatusBarItem": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show an Hg Graph button in the status bar when the workspace contains a Mercurial repository."
         }
       }
     }
