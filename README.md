@@ -4,8 +4,8 @@ A graphical changeset graph for Mercurial repositories, with lanes for topics
 and named branches.
 
 Run **Hg Graph: Open** from the command palette, click **Hg Graph** in the
-status bar, or use the graph button in the Source Control view. The graph highlights the checked-out changeset, defaults
-to the active topic, and supports topic and text filters.
+status bar, or use the graph button in the Source Control view. The graph opens on all topics, scrolled to the highlighted
+checked-out changeset, and supports topic and text filters.
 
 Click a changeset to open its details and changed files in a panel below the
 row, with added and deleted line counts per file. Click the row again or press
