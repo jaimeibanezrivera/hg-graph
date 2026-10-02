@@ -2,7 +2,7 @@
   "name": "mercurial-topic-map",
   "displayName": "Mercurial Topic Map",
   "description": "A graphical commit map for Mercurial topic-based workflows.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "local",
   "engines": {
     "vscode": "^1.85.0"
