@@ -467,6 +467,7 @@ function graphHtml(data, viewState) {
       return name === 'default' ? DEFAULT_COLOR : topicColorByName.get(name);
     }
 
+    const loadedRevs = new Set(data.commits.map(commit => commit.rev));
     const mainline = new Set();
     {
       const allByRev = new Map(data.commits.map(commit => [commit.rev, commit]));
@@ -551,8 +552,18 @@ function graphHtml(data, viewState) {
 
         commit.parents.forEach((parentRev, index) => {
           const parent = commitsByRev.get(parentRev);
-          if (!parent) return;
           const edge = { child: commit.rev, parent: parentRev };
+          if (!parent && loadedRevs.has(parentRev)) {
+            edges.push({ ...edge, lane, stub: true });
+            return;
+          }
+          if (!parent) {
+            const target = index === 0 && isDefaultLaneCommit(commit) && lanes[0] == null
+              ? 0
+              : allocateLane(index === 0 ? lane : lane + 1);
+            lanes[target] = edge;
+            return;
+          }
           if (index === 0) {
             const target = isDefaultLaneCommit(commit) && isDefaultLaneCommit(parent) && lanes[0] == null
               ? 0
@@ -571,6 +582,9 @@ function graphHtml(data, viewState) {
         laneCount = Math.max(laneCount, lanes.length, lane + 1);
         while (lanes.length > firstTopicLane && lanes[lanes.length - 1] == null) lanes.pop();
       }
+      lanes.forEach((edge, index) => {
+        if (edge) edges.push({ child: edge.child, parent: edge.parent, lane: index, offscreen: true });
+      });
       return { positions, edges, laneCount };
     }
 
@@ -754,8 +768,17 @@ function graphHtml(data, viewState) {
       const ns = 'http://www.w3.org/2000/svg';
       const commitsByRev = new Map(commits.map(commit => [commit.rev, commit]));
       for (const edge of edges) {
+        const source = positions.get(edge.child);
         const path = document.createElementNS(ns, 'path');
-        path.setAttribute('d', edgePath(positions.get(edge.child), positions.get(edge.parent), edge.lane));
+        if (edge.stub) {
+          const x = laneX(source.lane);
+          const y = rowY(source.row);
+          path.setAttribute('d', 'M ' + x + ' ' + y + ' L ' + x + ' ' + (y + gapAfter(source.row) + Math.round(ROW_HEIGHT * 0.6)));
+          path.setAttribute('stroke-dasharray', '3 3');
+        } else {
+          const target = edge.offscreen ? { lane: edge.lane, row: commits.length } : positions.get(edge.parent);
+          path.setAttribute('d', edgePath(source, target, edge.lane));
+        }
         path.setAttribute('fill', 'none');
         path.setAttribute('stroke', commitColor(commitsByRev.get(edge.child)));
         path.setAttribute('stroke-width', '2');
