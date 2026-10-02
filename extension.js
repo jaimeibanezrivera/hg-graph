@@ -69,8 +69,9 @@ function setting(key, fallback) {
     : vscode.workspace.getConfiguration("mercurialTopicMap").get(key, fallback);
 }
 
-async function readGraph(root) {
-  const limit = setting("maxCommits", 500);
+async function readGraph(root, extraPages = 0) {
+  const pageSize = setting("maxCommits", 500);
+  const limit = pageSize * (1 + extraPages);
   const laneWidth = setting("laneWidth", 40);
   const detailsLocation = setting("detailsLocation", "inline");
   const template = [
@@ -92,7 +93,7 @@ async function readGraph(root) {
       "-r",
       "sort(all(), -rev)",
       "-l",
-      String(limit),
+      String(limit + 1),
       "-T",
       template,
     ]),
@@ -119,12 +120,15 @@ async function readGraph(root) {
       };
     });
 
+  const hasMore = commits.length > limit;
   const [currentRev, currentNode, currentTopic] = currentRaw.split(FIELD);
   return {
     root,
     laneWidth,
     detailsLocation,
-    commits,
+    pageSize,
+    hasMore,
+    commits: commits.slice(0, limit),
     current: {
       rev: Number(currentRev),
       node: currentNode,
@@ -138,6 +142,7 @@ class GraphPanel {
     this.panel = undefined;
     this.root = undefined;
     this.viewState = undefined;
+    this.extraPages = 0;
     this.refreshId = 0;
     this.panelDisposables = [];
   }
@@ -149,6 +154,7 @@ class GraphPanel {
     }
     if (root !== this.root) {
       this.viewState = undefined;
+      this.extraPages = 0;
     }
     this.root = root;
 
@@ -165,6 +171,7 @@ class GraphPanel {
         this.panel.onDidDispose(() => {
           this.panel = undefined;
           this.viewState = undefined;
+          this.extraPages = 0;
           for (const disposable of this.panelDisposables.splice(0)) {
             disposable.dispose();
           }
@@ -173,6 +180,10 @@ class GraphPanel {
           if (message.type === "refresh") {
             this.viewState = message.state;
             await this.refresh();
+          } else if (message.type === "loadMore") {
+            this.viewState = message.state;
+            this.extraPages++;
+            await this.refresh({ quiet: true });
           } else if (message.type === "copy") {
             await vscode.env.clipboard.writeText(message.value);
             vscode.window.setStatusBarMessage("Copied changeset hash", 1500);
@@ -189,15 +200,17 @@ class GraphPanel {
     await this.refresh();
   }
 
-  async refresh() {
+  async refresh({ quiet = false } = {}) {
     if (!this.panel || !this.root) {
       return;
     }
     const refreshId = ++this.refreshId;
-    this.panel.webview.html = loadingHtml();
+    if (!quiet) {
+      this.panel.webview.html = loadingHtml();
+    }
     let html;
     try {
-      const data = await readGraph(this.root);
+      const data = await readGraph(this.root, this.extraPages);
       html = graphHtml(data, this.viewState);
     } catch (error) {
       html = errorHtml(error.message || String(error));
@@ -382,6 +395,9 @@ function graphHtml(data, viewState) {
     .detail-value { margin-top: 4px; overflow-wrap: anywhere; }
     .hash { font-family: var(--vscode-editor-font-family); cursor: pointer; }
     .empty { padding: 30px; color: var(--vscode-descriptionForeground); }
+    .load-more { position: sticky; left: 0; width: min(100%, 100vw); display: flex; align-items: center; justify-content: center; }
+    .load-more button { height: 30px; padding: 0 16px; }
+    .load-more button:disabled { cursor: default; opacity: .7; }
     .file { display: flex; gap: 8px; align-items: baseline; padding: 2px 4px; margin: 0 -4px; border-radius: 2px; cursor: pointer; }
     .file:hover { background: var(--vscode-list-hoverBackground); }
     .file-status { flex: none; width: 12px; font: 12px var(--vscode-editor-font-family); font-weight: 600; }
@@ -440,7 +456,9 @@ function graphHtml(data, viewState) {
     const map = document.getElementById('map');
     const details = document.getElementById('details');
     const summary = document.getElementById('summary');
+    const scroll = document.getElementById('scroll');
     const ROW_HEIGHT = 62;
+    const LOAD_MORE_HEIGHT = 64;
     const LANE_WIDTH = data.laneWidth;
     const GRAPH_PADDING = 24;
     const DETAILS_HEIGHT = 280;
@@ -743,7 +761,7 @@ function graphHtml(data, viewState) {
       const commits = visibleCommits();
       const { positions, edges, laneCount } = layout(commits);
       const graphWidth = Math.max(140, (laneCount - 1) * LANE_WIDTH + GRAPH_PADDING * 2);
-      const width = Math.max(document.getElementById('scroll').clientWidth, graphWidth + 700);
+      const width = Math.max(scroll.clientWidth, graphWidth + 700);
       expandedRow = null;
       if (INLINE) {
         detailsRev = null;
@@ -753,7 +771,7 @@ function graphHtml(data, viewState) {
       }
       const height = commits.length * ROW_HEIGHT + (expandedRow != null ? DETAILS_HEIGHT : 0);
       map.style.width = width + 'px';
-      map.style.height = height + 'px';
+      map.style.height = (height + (data.hasMore ? LOAD_MORE_HEIGHT : 0)) + 'px';
       svg.setAttribute('width', graphWidth);
       svg.setAttribute('height', height);
       svg.innerHTML = '';
@@ -762,6 +780,7 @@ function graphHtml(data, viewState) {
 
       if (!commits.length) {
         rows.innerHTML = '<div class="empty">No matching changesets.</div>';
+        appendLoadMore();
         return;
       }
 
@@ -831,6 +850,7 @@ function graphHtml(data, viewState) {
           rows.appendChild(inlineDetails(commit, graphWidth));
         }
       });
+      appendLoadMore();
 
       if (!INLINE) {
         const selected = commits.find(commit => commit.rev === selectedRev)
@@ -846,13 +866,36 @@ function graphHtml(data, viewState) {
 
     topicSelect.addEventListener('change', render);
     search.addEventListener('input', render);
+    function appendLoadMore() {
+      if (!data.hasMore) return;
+      const container = document.createElement('div');
+      container.className = 'load-more';
+      container.style.height = LOAD_MORE_HEIGHT + 'px';
+      const button = document.createElement('button');
+      button.textContent = 'Load ' + data.pageSize + ' more changesets';
+      button.addEventListener('click', () => {
+        button.disabled = true;
+        button.textContent = 'Loading…';
+        vscode.postMessage({ type: 'loadMore', state: currentViewState() });
+      });
+      container.appendChild(button);
+      rows.appendChild(container);
+    }
+
+    function currentViewState() {
+      return {
+        topic: topicSelect.value,
+        search: search.value,
+        selectedRev,
+        scrollTop: scroll.scrollTop,
+      };
+    }
+
     document.getElementById('refresh').addEventListener('click', () =>
-      vscode.postMessage({
-        type: 'refresh',
-        state: { topic: topicSelect.value, search: search.value, selectedRev },
-      }));
+      vscode.postMessage({ type: 'refresh', state: currentViewState() }));
     window.addEventListener('resize', render);
     render();
+    if (savedState && savedState.scrollTop) scroll.scrollTop = savedState.scrollTop;
   </script>
 </body>
 </html>`;
