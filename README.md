@@ -1,10 +1,19 @@
-# Mercurial Topic Map
+# hg graph
 
-A graphical changeset map for Mercurial repositories that use the topics
-extension.
+A graphical changeset graph for Mercurial repositories, with lanes for topics
+and named branches.
 
-Run **Mercurial Topic Map: Open** from the command palette or use the graph
-button in the Source Control view. The map highlights the checked-out
-changeset, defaults to the active topic, and supports topic and text filters.
+Run **hg graph: Open** from the command palette or use the graph button in the
+Source Control view. The graph highlights the checked-out changeset, defaults
+to the active topic, and supports topic and text filters.
 
-Set `mercurialTopicMap.maxCommits` to control how many changesets are loaded.
+Click a changeset to see its details and the files it changed. Click a file to
+open a side-by-side diff against the changeset's first parent.
+
+Settings:
+
+- `hgGraph.maxCommits` controls how many changesets are loaded.
+- `hgGraph.laneWidth` controls the horizontal spacing between graph lanes.
+
+Values set under the old `mercurialTopicMap.*` keys are still read when the
+new keys are not set.
