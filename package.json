@@ -1,0 +1,60 @@
+{
+  "name": "mercurial-topic-map",
+  "displayName": "Mercurial Topic Map",
+  "description": "A graphical commit map for Mercurial topic-based workflows.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Visualization"
+  ],
+  "activationEvents": [
+    "onCommand:mercurialTopicMap.open"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mercurialTopicMap.open",
+        "title": "Mercurial Topic Map: Open",
+        "icon": "$(git-branch)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "mercurialTopicMap.open",
+          "group": "navigation",
+          "when": "scmProvider == hg"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mercurialTopicMap.open"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Mercurial Topic Map",
+      "properties": {
+        "mercurialTopicMap.maxCommits": {
+          "type": "number",
+          "default": 500,
+          "minimum": 10,
+          "maximum": 5000,
+          "description": "Maximum number of changesets displayed."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.0"
+  },
+  "license": "MIT"
+}
