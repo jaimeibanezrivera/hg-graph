@@ -375,7 +375,9 @@ function graphHtml(data, viewState) {
     .current .short-hash, .current .date { opacity: .8; }
     aside { border-left: 1px solid var(--vscode-panel-border); padding: 16px; overflow: auto; }
     aside h3 { margin: 0 0 16px; font-size: 14px; }
-    .detail-message { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; }
+    .detail-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; align-items: baseline; }
+    .detail-fields .detail-label, .detail-fields .detail-value { margin-top: 0; }
+    .detail-message { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--vscode-panel-border); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 19px; }
     .detail-label { color: var(--vscode-descriptionForeground); margin-top: 14px; font-size: 11px; text-transform: uppercase; }
     .detail-value { margin-top: 4px; overflow-wrap: anywhere; }
     .hash { font-family: var(--vscode-editor-font-family); cursor: pointer; }
@@ -613,13 +615,15 @@ function graphHtml(data, viewState) {
     }
 
     function detailsInfoHtml(commit) {
-      return '<div class="detail-message">' + text(commit.description) + '</div>' +
-        '<div class="detail-label">Topic</div><div class="detail-value">' + text(topicName(commit)) + '</div>' +
-        '<div class="detail-label">Changeset</div><div class="detail-value hash" title="Click to copy">' + text(commit.rev + ':' + commit.node) + '</div>' +
-        '<div class="detail-label">Author</div><div class="detail-value">' + text(commit.author) + '</div>' +
-        '<div class="detail-label">Date</div><div class="detail-value">' + text(commit.date) + '</div>' +
-        '<div class="detail-label">Phase</div><div class="detail-value">' + text(commit.phase) + '</div>' +
-        '<div class="detail-label">Parents</div><div class="detail-value">' + text(commit.parents.join(', ') || 'none') + '</div>';
+      return '<div class="detail-fields">' +
+          '<div class="detail-label">Changeset</div><div class="detail-value hash" title="Click to copy">' + text(commit.rev + ':' + commit.node) + '</div>' +
+          '<div class="detail-label">Parents</div><div class="detail-value">' + text(commit.parents.join(', ') || 'none') + '</div>' +
+          '<div class="detail-label">Author</div><div class="detail-value">' + text(commit.author) + '</div>' +
+          '<div class="detail-label">Date</div><div class="detail-value">' + text(commit.date) + '</div>' +
+          '<div class="detail-label">Topic</div><div class="detail-value">' + text(topicName(commit)) + '</div>' +
+          '<div class="detail-label">Phase</div><div class="detail-value">' + text(commit.phase) + '</div>' +
+        '</div>' +
+        '<div class="detail-message">' + text(commit.description) + '</div>';
     }
 
     const FILES_HTML = '<div class="detail-label">Changed files</div><div class="detail-value files"></div>';
