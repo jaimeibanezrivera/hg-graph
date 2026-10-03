@@ -23,3 +23,11 @@ Settings:
 
 Values set under the old `mercurialTopicMap.*` keys are still read when the
 new keys are not set.
+
+## Development
+
+Run the tests with `npm install` and then `npm test`. They use Node's built-in
+test runner, a stub of the `vscode` module, jsdom for the graph webview, and
+temporary Mercurial repositories. Tests that need `hg` are skipped when it is
+not on PATH, and topic tests need the evolve extension
+(`pip install mercurial hg-evolve`).
