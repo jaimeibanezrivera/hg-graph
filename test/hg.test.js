@@ -97,6 +97,42 @@ describe("readGraph", { skip }, () => {
   });
 });
 
+describe("readGraph without the topic extension", { skip }, () => {
+  const fs = require("fs");
+  const path = require("path");
+  let savedHgrc;
+  before(() => {
+    savedHgrc = process.env.HGRCPATH;
+    const plain = path.join(path.dirname(savedHgrc), "hgrc-no-topic");
+    fs.writeFileSync(plain, "[ui]\nusername = Test Author <test@example.com>\n");
+    process.env.HGRCPATH = plain;
+  });
+  after(() => {
+    process.env.HGRCPATH = savedHgrc;
+  });
+
+  test("reads changesets with empty topics and unknown older topics", async () => {
+    const repo = createRepo();
+    for (let index = 0; index < 3; index++) {
+      repo.write("a.txt", `${index}\n`);
+      repo.commit(`change ${index}`);
+    }
+    state.settings["hgGraph.maxCommits"] = 2;
+    const data = await readGraph(repo.root);
+    assert.deepEqual(data.commits.map((commit) => commit.topic), ["", ""]);
+    assert.equal(data.current.topic, "");
+    assert.equal(data.hasMore, true);
+    assert.equal(data.olderTopics, null);
+  });
+
+  test("reads an empty repository", async () => {
+    const data = await readGraph(createRepo().root);
+    assert.deepEqual(data.commits, []);
+    assert.equal(data.hasMore, false);
+    assert.equal(data.current.rev, -1);
+  });
+});
+
 describe("readGraph with topics", { skip: skipTopics }, () => {
   let repo;
   before(() => {

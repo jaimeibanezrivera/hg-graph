@@ -516,9 +516,13 @@ function graphHtml(data, viewState) {
     {
       const allByRev = new Map(data.commits.map(commit => [commit.rev, commit]));
       let commit = data.commits.find(candidate => topicName(candidate) === 'default');
+      // Follow the first parent that is itself on default, so a merge whose
+      // first parent is a topic changeset keeps the default line in lane 0.
       while (commit && !mainline.has(commit.rev)) {
         mainline.add(commit.rev);
-        commit = allByRev.get(commit.parents[0]);
+        commit = commit.parents
+          .map(parent => allByRev.get(parent))
+          .find(parent => parent && topicName(parent) === 'default');
       }
     }
 

@@ -190,6 +190,18 @@ describe("graph layout", () => {
     assert.deepEqual(view.dots(), [24, 64, 24, 24]);
   });
 
+  test("keeps default in the first lane when a merge's first parent is a topic", () => {
+    const commits = [commit(3, [2, 1]), commit(2, [0], { topic: "t" }), commit(1, [0]), commit(0, [])];
+    const view = render(graphData({ commits, current: { rev: 3, node: "x", topic: "" } }));
+    assert.deepEqual(view.dots(), [24, 64, 24, 24]);
+  });
+
+  test("renders an empty repository", () => {
+    const view = render(graphData({ commits: [], current: { rev: -1, node: "0".repeat(40), topic: "" } }));
+    assert.equal(view.$(".empty").textContent, "No matching changesets.");
+    assert.equal(view.$("#scroll").scrollTop, 0);
+  });
+
   test("draws dashed stubs to parents hidden by a filter", () => {
     const view = render();
     view.setValue("#topic", "feature", "change");
