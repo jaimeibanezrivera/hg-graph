@@ -77,10 +77,12 @@
     }
   },
   "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
     "package": "vsce package --allow-missing-repository"
   },
   "devDependencies": {
-    "@vscode/vsce": "^3.6.0"
+    "@vscode/vsce": "^3.6.0",
+    "jsdom": "^26.1.0"
   },
   "license": "MIT"
 }

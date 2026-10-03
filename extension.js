@@ -1006,4 +1006,18 @@ function activate(context) {
 
 function deactivate() {}
 
-module.exports = { activate, deactivate };
+module.exports = {
+  activate,
+  deactivate,
+  // Exposed for the tests in test/.
+  _internal: {
+    readGraph,
+    changedFiles,
+    diffStats,
+    revisionContentProvider,
+    escapeHtml,
+    errorHtml,
+    graphHtml,
+    GraphPanel,
+  },
+};
