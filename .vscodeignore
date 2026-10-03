@@ -2,3 +2,4 @@
 **/.npm-cache/**
 package-lock.json
 *.vsix
+test/**
